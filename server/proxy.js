@@ -43,7 +43,7 @@ const server = http.createServer((req, res) => {
         <body>
             <h1>DevilBridge Local Proxy</h1>
             <div class="status">
-                <strong>Status:</strong> <span class="connected">● RUNNING</span><br>
+                <strong>Status:</strong> <span class="connected">RUNNING</span><br>
                 <strong>Remote Server:</strong> ${REMOTE_URL}<br>
                 <strong>Active Clients:</strong> <span id="clientCount">${localClients.size}</span>
             </div>
