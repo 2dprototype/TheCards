@@ -343,30 +343,43 @@ function GameLogic.handlePlayerDropped(clientId)
 end
 
 function GameLogic.resolveTrick()
-    local bestCard = GameLogic.trick[1].card
     local winnerIdx = GameLogic.trick[1].playerIdx
+    local bestCard = GameLogic.trick[1].card
     
-    for i=2, 4 do
-        local c = GameLogic.trick[i].card
-        local pIdx = GameLogic.trick[i].playerIdx
+    for i = 2, 4 do
+        local currentEntry = GameLogic.trick[i]
+        local c = currentEntry.card
+        local pIdx = currentEntry.playerIdx
         
-        local isSpade = (c.suit == "S")
-        local bestIsSpade = (bestCard.suit == "S")
+        -- 1. Check if current card is a Spade (Trump)
+        -- 2. Check if best card is a Spade (Trump)
         
-        if isSpade and not bestIsSpade then
+        if c.suit == "S" and bestCard.suit ~= "S" then
+            -- Current is Spade, Best is NOT Spade -> Current Wins
             bestCard = c
             winnerIdx = pIdx
-        elseif isSpade and bestIsSpade then
+        elseif c.suit == "S" and bestCard.suit == "S" then
+            -- Both are Spades -> Higher Rank Wins
             if rankValues[c.rank] > rankValues[bestCard.rank] then
                 bestCard = c
                 winnerIdx = pIdx
             end
-        elseif c.suit == GameLogic.trickLeadSuit and bestCard.suit == GameLogic.trickLeadSuit then
-            if rankValues[c.rank] > rankValues[bestCard.rank] then
-                bestCard = c
-                winnerIdx = pIdx
+        elseif c.suit ~= "S" and bestCard.suit ~= "S" then
+            -- Neither is a Spade
+            -- Does Current follow lead suit?
+            if c.suit == GameLogic.trickLeadSuit then
+                -- If Best follows lead suit, compare ranks. If Best DOES NOT follow lead suit, Current wins automatically.
+                if bestCard.suit ~= GameLogic.trickLeadSuit then
+                    bestCard = c
+                    winnerIdx = pIdx
+                elseif rankValues[c.rank] > rankValues[bestCard.rank] then
+                    bestCard = c
+                    winnerIdx = pIdx
+                end
             end
+            -- Note: If c.suit ~= lead suit and bestCard DOES follow lead suit, current card loses (ignored).
         end
+        -- Note: If bestCard is Spade and current is NOT Spade -> current loses (ignored).
     end
     
     GameLogic.players[winnerIdx].tricksWon = GameLogic.players[winnerIdx].tricksWon + 1
@@ -523,51 +536,98 @@ end
 
 function GameLogic.draw()
     if #GameLogic.players == 0 then return end
-    
+
+    local W, H = _G.getW(), _G.getH()
+    local cx, cy = W / 2, H / 2
     local font = love.graphics.getFont()
-    local cx, cy = _G.getW() / 2, _G.getH() / 2
-    
+    local fontH = font:getHeight()
+
+    -- Helper to draw professional text with drop shadow
+    local function drawShadowText(text, x, y, w, align, color)
+        love.graphics.setColor(0, 0, 0, 0.6)
+        love.graphics.printf(text, x + 2, y + 2, w, align)
+        love.graphics.setColor(color or {1, 1, 1, 1})
+        love.graphics.printf(text, x, y, w, align)
+    end
+
     if GameLogic.phase == "MATCH_OVER" then
-        love.graphics.setColor(1, 0.8, 0.2, 1)
-        love.graphics.printf("MATCH OVER - FINAL SCORES", 0, cy - 180, _G.getW(), "center")
-        
+        -- Professional Match Over Overlay
+        love.graphics.setColor(0.05, 0.05, 0.1, 0.9)
+        love.graphics.rectangle("fill", cx - 250, cy - 200, 500, 400, 16)
+        love.graphics.setColor(1, 0.85, 0.3, 0.5)
+        love.graphics.rectangle("line", cx - 250, cy - 200, 500, 400, 16)
+
+        drawShadowText("MATCH OVER - FINAL SCORES", 0, cy - 150, W, "center", {1, 0.85, 0.3, 1})
+
         local sorted = {}
-        for i=1, 4 do table.insert(sorted, GameLogic.players[i]) end
-        table.sort(sorted, function(a,b) return a.score > b.score end)
-        
+        for i = 1, 4 do table.insert(sorted, GameLogic.players[i]) end
+        table.sort(sorted, function(a, b) return a.score > b.score end)
+
         for i, p in ipairs(sorted) do
-            if p.id == GameLogic.players[GameLogic.myPlayerIdx].id then love.graphics.setColor(0.3, 0.9, 0.3, 1)
-            else love.graphics.setColor(1, 1, 1, 1) end
-            
-            love.graphics.printf(i .. ". " .. p.name .. " - Score: " .. string.format("%.1f", p.score), 0, cy - 100 + (i * 40), _G.getW(), "center")
+            local pColor = (p.id == GameLogic.players[GameLogic.myPlayerIdx].id) and {0.3, 0.95, 0.4, 1} or {1, 1, 1, 1}
+            drawShadowText(i .. ". " .. p.name .. " - Score: " .. string.format("%.1f", p.score),
+                           0, cy - 70 + (i * 45), W, "center", pColor)
         end
         return
     end
-    
-    -- Draw Match Info
-    love.graphics.setColor(1, 1, 1, 0.8)
-    love.graphics.print("Round: " .. GameLogic.roundNum .. "/5 | Phase: " .. GameLogic.phase, 15, 15)
-    
+
+    -- 1. Match Info (Top-Left)
+    love.graphics.setColor(0.05, 0.05, 0.1, 0.8)
+    love.graphics.rectangle("fill", 15, 15, 200, 80, 10)
+    love.graphics.setColor(1, 1, 1, 0.1)
+    love.graphics.rectangle("line", 15, 15, 200, 80, 10)
+
+    drawShadowText("Round: " .. GameLogic.roundNum .. "/5", 25, 25, 180, "left", {0.9, 0.9, 0.9, 1})
+    drawShadowText("Phase: " .. GameLogic.phase, 25, 45, 180, "left", {0.8, 0.8, 0.8, 1})
+
     if (GameLogic.phase == "CALLING" or GameLogic.phase == "PLAYING") and GameLogic.turnTimer then
-        love.graphics.setColor(1, 0.5, 0.5, 1)
-        love.graphics.print("Time Left: " .. math.ceil(GameLogic.turnTimer), cx - 60, 40)
+        local tColor = GameLogic.turnTimer <= 5 and {1, 0.4, 0.4, 1} or {0.4, 0.9, 1, 1}
+        drawShadowText("Time: " .. math.ceil(GameLogic.turnTimer) .. "s", 25, 65, 180, "left", tColor)
     end
-    
-    if GameLogic.trickLeadSuit then
-        love.graphics.setColor(1, 1, 1, 0.8)
-        love.graphics.printf("Lead Suit: " .. GameLogic.trickLeadSuit, 0, cy - 80, _G.getW(), "center")
+
+    -- 2. Scoreboard (Top-Right)
+    local sbWidth = 240
+    local sbHeight = 50 + (4 * 30)
+    local sbX = W - sbWidth - 15
+    local sbY = 15
+
+    love.graphics.setColor(0.05, 0.05, 0.1, 0.85)
+    love.graphics.rectangle("fill", sbX, sbY, sbWidth, sbHeight, 10)
+    love.graphics.setColor(1, 1, 1, 0.1)
+    love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 10)
+
+    drawShadowText("SCORES", sbX, sbY + 15, sbWidth, "center", {1, 0.85, 0.3, 1})
+    love.graphics.setColor(1, 1, 1, 0.2)
+    love.graphics.line(sbX + 20, sbY + 40, sbX + sbWidth - 20, sbY + 40)
+
+    local scoreY = sbY + 50
+    for i = 1, 4 do
+        local p = GameLogic.players[i]
+        local isCurrent = (i == GameLogic.currentPlayer)
+        local pColor = isCurrent and {0.3, 0.95, 0.4, 1} or {0.95, 0.95, 0.95, 1}
+        
+        -- UPDATED: Added player call to the name display
+        local displayName = p.name .. "  Call: " .. (p.call or 0) .. ""
+        drawShadowText(displayName, sbX + 25, scoreY, sbWidth - 100, "left", pColor)
+        drawShadowText(string.format("%.1f", p.score or 0), sbX + sbWidth - 75, scoreY, 50, "right", pColor)
+        scoreY = scoreY + 30
     end
-    
-    -- Draw Last Winner if evaluating trick
+
+    -- 3. Center Trick Info
+    -- if GameLogic.trickLeadSuit then
+        -- local suitNames = {S = "Spades", H = "Hearts", D = "Diamonds", C = "Clubs"}
+        -- drawShadowText("Lead Suit: " .. suitNames[GameLogic.trickLeadSuit], 0, cy - 90, W, "center", {1, 0.8, 0.8, 1})
+    -- end
+
     if GameLogic.phase == "EVAL_TRICK" and #GameLogic.trick > 0 then
-        -- Find who actually won so far (just for visual feedback)
         local bestCard = GameLogic.trick[1].card
         local winnerIdx = GameLogic.trick[1].playerIdx
-        for i=2, #GameLogic.trick do
+        for i = 2, #GameLogic.trick do
             local c = GameLogic.trick[i].card
             local pIdx = GameLogic.trick[i].playerIdx
             local isSpade = (c.suit == "S")
             local bestIsSpade = (bestCard.suit == "S")
+            
             if isSpade and not bestIsSpade then
                 bestCard = c; winnerIdx = pIdx
             elseif isSpade and bestIsSpade and rankValues[c.rank] > rankValues[bestCard.rank] then
@@ -576,35 +636,55 @@ function GameLogic.draw()
                 bestCard = c; winnerIdx = pIdx
             end
         end
-        love.graphics.setColor(1, 0.8, 0.2, 1)
-        love.graphics.printf(GameLogic.players[winnerIdx].name .. " wins trick!", 0, cy + 90, _G.getW(), "center")
+        drawShadowText(GameLogic.players[winnerIdx].name .. " wins trick!", 0, cy + 90, W, "center", {1, 0.85, 0.3, 1})
     end
-    
+
+    -- 4. Player Names (Centered and Rotated precisely on sides)
     for i = 1, 4 do
         local p = GameLogic.players[i]
         local isCurrent = (i == GameLogic.currentPlayer)
         local pos = getRelativePos(i)
-        
-        -- Player Label Positions
-        local lx, ly = 0, 0
-        if pos == "BOTTOM" then lx = cx - 100; ly = _G.getH() - 170
-        elseif pos == "LEFT" then lx = 20; ly = cy - 160
-        elseif pos == "TOP" then lx = cx - 100; ly = 20
-        elseif pos == "RIGHT" then lx = _G.getW() - 200; ly = cy - 160 end
-        
-        -- Render Label
-        if isCurrent then
-            if p.isBot and (GameLogic.phase == "CALLING" or GameLogic.phase == "PLAYING") then
-                love.graphics.setColor(0.3, 0.9, 0.3, 1)
-                love.graphics.print("Thinking...", lx, ly - 20)
-            end
-            love.graphics.setColor(0.5, 1.0, 0.5, 1)
-        else 
-            love.graphics.setColor(1, 1, 1, 0.9) 
+
+        local lx, ly = cx, cy
+        local angle = 0
+        local edgeOffset = 40
+
+        if pos == "BOTTOM" then
+            lx = cx
+            ly = H - edgeOffset - 130
+            angle = 0
+        elseif pos == "LEFT" then
+            lx = edgeOffset
+            ly = cy
+            angle = math.pi / 2
+        elseif pos == "TOP" then
+            lx = cx
+            ly = edgeOffset
+            angle = math.pi
+        elseif pos == "RIGHT" then
+            lx = W - edgeOffset
+            ly = cy
+            angle = -math.pi / 2
         end
-        
-        local info = string.format("%s (Call: %d | Won: %d) Score: %.1f", p.name, p.call, p.tricksWon, p.score)
-        love.graphics.print(info, lx, ly)
+
+        love.graphics.push()
+        love.graphics.translate(lx, ly)
+        love.graphics.rotate(angle)
+
+        local pColor = isCurrent and {0.3, 0.95, 0.4, 1} or {1, 1, 1, 0.9}
+
+        if isCurrent then
+            love.graphics.setColor(0.3, 0.95, 0.4, 0.2)
+            love.graphics.rectangle("fill", -80, -12, 160, 24, 12)
+        end
+
+        drawShadowText(p.name, -100, -fontH / 2, 200, "center", pColor)
+
+        if isCurrent and p.isBot and (GameLogic.phase == "CALLING" or GameLogic.phase == "PLAYING") then
+            drawShadowText("Thinking...", -100, (fontH / 2) + 4, 200, "center", {0.6, 0.6, 0.6, 1})
+        end
+
+        love.graphics.pop()
         
         -- Draw Hand Backs for Opponents Beautifully fanned out
         local hSize = p.handSize or (p.hand and #p.hand) or 0
@@ -616,14 +696,14 @@ function GameLogic.draw()
             for j = 1, hSize do 
                 local offset = (j - hSize/2) * 12
                 local rx, ry, rz = lx, ly, startRot + ((j-1) * rotStep)
-                if pos == "LEFT" then GameLogic.drawCardBack(100, cy + offset, math.pi/2 + rz)
-                elseif pos == "TOP" then GameLogic.drawCardBack(cx + offset, 110, math.pi + rz)
-                elseif pos == "RIGHT" then GameLogic.drawCardBack(_G.getW() - 100, cy + offset, -math.pi/2 + rz) end
+                if pos == "LEFT" then GameLogic.drawCardBack(140, cy + offset, math.pi/2 + rz)
+                elseif pos == "TOP" then GameLogic.drawCardBack(cx + offset, 140, math.pi + rz)
+                elseif pos == "RIGHT" then GameLogic.drawCardBack(_G.getW() - 140, cy + offset, -math.pi/2 + rz) end
             end
         end
     end
     
-    -- Draw Local Hand
+    -- 5. Draw Local Hand
     local myP = GameLogic.players[GameLogic.myPlayerIdx]
     if myP and myP.hand then
         for i, c in ipairs(myP.hand) do
@@ -642,44 +722,52 @@ function GameLogic.draw()
         end
     end
 
-    -- Draw Flying Trick Cards
+    -- 6. Draw Trick Cards (Flying and Placed)
     for _, f in ipairs(GameLogic.flyingCards) do
         GameLogic.drawCard(f.card, f.card.visX, f.card.visY, true)
     end
-    
-    -- Draw Trick
-    for i, t in ipairs(GameLogic.trick) do
+
+    for _, t in ipairs(GameLogic.trick) do
         if t.card.visX then
             GameLogic.drawCard(t.card, t.card.visX, t.card.visY, true)
         end
     end
-
     
-    -- Draw Calling UI
+    -- 7. Draw Calling UI
     if GameLogic.phase == "CALLING" and GameLogic.currentPlayer == GameLogic.myPlayerIdx and not GameLogic.players[GameLogic.currentPlayer].isBot then
-        local boxW = 8 * 50
+        local boxW = 8 * 55
         local startX = cx - (boxW / 2)
         local startY = cy + 50
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.printf("Make your Call:", 0, startY - 30, _G.getW(), "center")
         
+        -- Dark Background Panel
+        love.graphics.setColor(0.05, 0.05, 0.1, 0.85)
+        love.graphics.rectangle("fill", startX - 20, startY - 40, boxW + 40, 110, 12)
+        love.graphics.setColor(1, 1, 1, 0.1)
+        love.graphics.rectangle("line", startX - 20, startY - 40, boxW + 40, 110, 12)
+
+        drawShadowText("Make Your Call:", 0, startY - 25, W, "center", {1, 1, 1, 1})
+
+        local mx, my = love.mouse.getPosition()
         for j = 1, 8 do
-            local bx = startX + ((j-1) * 50)
-            local by = startY
-            
-            local mx, my = love.mouse.getPosition()
-            if mx >= bx and mx <= bx + 40 and my >= by and my <= by + 40 then
-                love.graphics.setColor(0.4, 0.7, 1.0, 1)
+            local bx = startX + ((j - 1) * 55)
+            local by = startY + 10
+
+            local isHovered = (mx >= bx and mx <= bx + 45 and my >= by and my <= by + 45)
+
+            if isHovered then
+                love.graphics.setColor(0.3, 0.7, 1.0, 1)
+                love.graphics.rectangle("fill", bx, by - 5, 45, 50, 8)
+                drawShadowText(tostring(j), bx, by + 12, 45, "center", {0, 0, 0, 1})
             else
-                love.graphics.setColor(0.2, 0.4, 0.8, 1)
+                love.graphics.setColor(0.15, 0.25, 0.45, 1)
+                love.graphics.rectangle("fill", bx, by, 45, 45, 8)
+                drawShadowText(tostring(j), bx, by + 12, 45, "center", {1, 1, 1, 1})
             end
-            
-            love.graphics.rectangle("fill", bx, by, 40, 40, 6, 6)
-            love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.printf(tostring(j), bx, by + 10, 40, "center")
         end
     end
 end
+
+
 
 function GameLogic.drawCardBack(x, y, rotation)
     love.graphics.push()

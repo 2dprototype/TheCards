@@ -39,6 +39,8 @@ end
 function love.load()
     love.window.setMode(_G.SCREEN_WIDTH, _G.SCREEN_HEIGHT, {resizable=true, vsync=true, minwidth=700, minheight=400})
     love.window.setTitle("Devil Bridge")
+    love.keyboard.setTextInput(true)
+    love.keyboard.setKeyRepeat(true)
     
     love.graphics.setDefaultFilter("linear", "linear")
     love.keyboard.setKeyRepeat(true)
