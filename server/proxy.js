@@ -125,7 +125,7 @@ wss.on('connection', (localSocket, req) => {
         try {
             const dataStr = data.toString();
             const msg = JSON.parse(dataStr);
-            console.log(`[PROXY] Remote -> Local (${localClientId}):`, msg.type);
+            console.log(`[PROXY] Remote -> Local (${localClientId}):`, dataStr);
             
             // Track room state from remote responses
             if (msg.type === 'ROOM_CREATED') {
@@ -175,9 +175,9 @@ wss.on('connection', (localSocket, req) => {
             const dataStr = data.toString();
             try {
                 const msg = JSON.parse(dataStr);
-                console.log(`[PROXY] Local -> Remote (${localClientId}):`, msg.type);
+                console.log(`[PROXY] Local -> Remote (${localClientId}):`, dataStr);
             } catch (e) {
-                console.log(`[PROXY] Local -> Remote (${localClientId}): [Invalid JSON]`);
+                console.log(`[PROXY] Local -> Remote (${localClientId}): [Invalid JSON] ${dataStr}`);
             }
             
             if (remoteSocket.readyState === WebSocket.OPEN) {
@@ -207,12 +207,12 @@ wss.on('connection', (localSocket, req) => {
 });
 
 // Start the proxy server
-server.listen(LOCAL_PORT, () => {
+server.listen(LOCAL_PORT, '0.0.0.0', () => {
     console.log('=' .repeat(60));
     console.log('DevilBridge Local Proxy Server');
     console.log('=' .repeat(60));
-    console.log(`Local WebSocket endpoint: ws://localhost:${LOCAL_PORT}`);
-    console.log(`Local HTTP endpoint: http://localhost:${LOCAL_PORT}`);
+    console.log(`Local WebSocket endpoint: ws://0.0.0.0:${LOCAL_PORT}`);
+    console.log(`Local HTTP endpoint: http://0.0.0.0:${LOCAL_PORT}`);
     console.log(`Remote server: ${REMOTE_URL}`);
     console.log('=' .repeat(60));
     console.log('\nProxy is running! Connect your game client to:');

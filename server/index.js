@@ -80,9 +80,10 @@ wss.on('connection', (socket, req) => {
     
     const sendMsg = (msg) => {
         try {
+            console.log(`[SERVER] Sending to ${clientId}:`, JSON.stringify(msg));
             socket.send(JSON.stringify(msg));
         } catch(e) {
-            console.error("Error sending message to", clientId);
+            console.error("[SERVER] Error sending message to", clientId);
         }
     }
 
@@ -92,10 +93,10 @@ wss.on('connection', (socket, req) => {
     socket.on('message', (message) => {
         try {
             const msg = JSON.parse(message);
-            console.log(`Received from ${clientId}:`, msg.type);
+            console.log(`[SERVER] Received from ${clientId}:`, message.toString());
             handleMessage(socket, clientId, msg);
         } catch (e) {
-            console.error("Failed to parse JSON:", message.toString(), e);
+            console.error("[SERVER] Failed to parse JSON:", message.toString(), e);
         }
     });
 
@@ -213,8 +214,8 @@ function handleMessage(socket, clientId, msg) {
     }
 }
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
     console.log(`DevilBridge Relay Server listening on port ${PORT}`);
-    console.log(`WebSocket endpoint: ws://localhost:${PORT}`);
-    console.log(`HTTP endpoint: http://localhost:${PORT}`);
+    console.log(`WebSocket endpoint: ws://0.0.0.0:${PORT}`);
+    console.log(`HTTP endpoint: http://0.0.0.0:${PORT}`);
 });

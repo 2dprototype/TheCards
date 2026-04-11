@@ -1,4 +1,4 @@
 server/node_modules
 server/.env
-server/proxy.exe
-server/proxy.ini
+proxy_go/proxy.exe
+proxy_go/proxy.ini
