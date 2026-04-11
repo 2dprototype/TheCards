@@ -1,30 +1,34 @@
-local socket = require("socket")
+local websocket = require("websocket")
 local json = require("json")
 
 local Network = {}
-Network.tcp = nil
+Network.ws = nil
 Network.roomCode = nil
 Network.isHost = false
 Network.clientId = nil
 Network.players = {} -- List of clientIds in room
 
-local buffer = ""
-
 function Network.load()
     -- Nothing for now
 end
 
-function Network.connect(host, port)
-    local tcp = socket.tcp()
-    tcp:settimeout(0)
-    local _, err = tcp:connect(host, port)
-    Network.tcp = tcp
+function Network.connect(host, port, secure)
+    local scheme = secure and "wss" or "ws"
+    local url = scheme .. "://" .. host .. ":" .. port
+    local client = websocket.client.sync()
+    local ok, err = client:connect(url)
+    if not ok then
+        print("Connected failed: " .. tostring(err))
+        return
+    end
+    client.sock:settimeout(0)
+    Network.ws = client
 end
 
 function Network.disconnect()
-    if Network.tcp then
-        Network.tcp:close()
-        Network.tcp = nil
+    if Network.ws then
+        Network.ws:close()
+        Network.ws = nil
     end
     Network.roomCode = nil
     Network.isHost = false
@@ -32,21 +36,21 @@ function Network.disconnect()
 end
 
 function Network.connectAsHost(name)
-    Network.connect("127.0.0.1", 8080)
+    Network.connect("127.0.0.1", 8080, false)
     Network.isHost = true
     Network.send({ type = "CREATE_ROOM", name = name or "Host" })
 end
 
 function Network.connectAsGuest(code, name)
-    Network.connect("127.0.0.1", 8080)
+    Network.connect("127.0.0.1", 8080, false)
     Network.isHost = false
     Network.send({ type = "JOIN_ROOM", code = code, name = name })
 end
 
 function Network.send(data)
-    if Network.tcp then
+    if Network.ws then
         local str = json.encode(data)
-        Network.tcp:send(str .. "\n")
+        Network.ws:send(str)
     end
 end
 
@@ -60,42 +64,20 @@ function Network.sendGameMessage(target, data)
 end
 
 function Network.update(dt)
-    if not Network.tcp then return end
+    if not Network.ws then return end
     
-    local chunk, err, part = Network.tcp:receive("*a")
-    local data_str = nil
-    
-    if chunk then
-        data_str = chunk
-    elseif err == "timeout" and part and #part > 0 then
-        -- no complete data, wait for next tick? actually *a reads until closed. 
-        -- Oh wait, receive("*a") blocks until connection closed or error. We should use *l or read chunks.
-        -- We will use "*l" to read a line since we send lines.
-    end
-    
-    -- In non-blocking socket, *a returns partially read data in `part` on "timeout".
-    if err == "timeout" and part then
-        buffer = buffer .. part
-    elseif chunk then
-        buffer = buffer .. chunk
-    elseif err == "closed" then
-        if _G.handleNetworkEvent then _G.handleNetworkEvent({ type = "DISCONNECT", reason = "Server connection closed." }) end
-        Network.disconnect()
-        return
-    end
-    
-    -- Split by newline
     while true do
-        local startIdx, endIdx = string.find(buffer, "\n")
-        if startIdx then
-            local line = string.sub(buffer, 1, startIdx - 1)
-            buffer = string.sub(buffer, endIdx + 1)
-            
-            local ok, msg = pcall(json.decode, line)
+        local data, opcode, clean, close_code, err = Network.ws:receive()
+        if data then
+            local ok, msg = pcall(json.decode, data)
             if ok and msg then
                 Network.handleSystemMessage(msg)
             end
-        else
+        elseif err == "timeout" then
+            break
+        elseif err then
+            if _G.handleNetworkEvent then _G.handleNetworkEvent({ type = "DISCONNECT", reason = "Server connection closed." }) end
+            Network.disconnect()
             break
         end
     end
