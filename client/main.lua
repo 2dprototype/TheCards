@@ -2,6 +2,7 @@ local UI = require("ui")
 local Network = require("network")
 local GameLogic = require("game_logic")
 local Bot = require("bot")
+local Config = require("config")
 
 _G.SCREEN_WIDTH = 700
 _G.SCREEN_HEIGHT = 480
@@ -10,6 +11,7 @@ _G.SCREEN_HEIGHT = 480
 -- "MENU": Main Menu
 -- "LOBBY": Host Lobby / Creating
 -- "JOIN": Join input code
+-- "SETTINGS": Network settings
 -- "GAME": In game
 
 local appState = "MENU"
@@ -39,10 +41,12 @@ function love.load()
     love.window.setTitle("Devil Bridge")
     
     love.graphics.setDefaultFilter("linear", "linear")
+    love.keyboard.setKeyRepeat(true)
     
     UI.load()
     Network.load()
     GameLogic.load()
+    Config.load()
     
     -- Setup basic UI for MENU
     setupMenuUI()
@@ -53,6 +57,7 @@ function love.resize(w, h)
     if appState == "MENU" then setupMenuUI()
     elseif appState == "LOBBY" then setupLobbyUI()
     elseif appState == "JOIN" then setupJoinUI()
+    elseif appState == "SETTINGS" then setupSettingsUI()
     elseif appState == "LOBBY_GUEST" then setupGuestLobbyUI()
     elseif appState == "GAME" then 
         if _G.inPauseMenu then setupPauseUI() 
@@ -65,11 +70,15 @@ function setupMenuUI()
     UI.clear()
     local cx, cy = _G.getW() / 2, _G.getH() / 2
     UI.addTextInput("input_name", "Enter Username", cx - 100, cy - 170, 200, 40)
+    if _G.globalUsername == nil and Config.get("username") ~= "" then
+        _G.globalUsername = Config.get("username")
+    end
     if _G.globalUsername then UI.setText("input_name", _G.globalUsername) end
     UI.addButton("btn_host", "Host Online Game", cx - 100, cy - 100, 200, 50, function()
         local name = UI.getText("input_name")
         if not name or name == "" then name = "Host" end
         _G.globalUsername = name
+        Config.set("username", name)
         Network.connectAsHost(name)
         appState = "LOBBY"
         setupLobbyUI()
@@ -78,6 +87,7 @@ function setupMenuUI()
         local name = UI.getText("input_name")
         if not name or name == "" then name = "Player" .. math.random(100, 999) end
         _G.globalUsername = name
+        Config.set("username", name)
         appState = "JOIN"
         setupJoinUI()
     end)
@@ -85,9 +95,38 @@ function setupMenuUI()
         local name = UI.getText("input_name")
         if not name or name == "" then name = "You" end
         _G.globalUsername = name
+        Config.set("username", name)
         GameLogic.startOfflineGame()
         appState = "GAME"
         setupGameUI()
+    end)
+    UI.addButton("btn_settings", "Settings", cx - 100, cy + 140, 200, 50, function()
+        local name = UI.getText("input_name")
+        if name and name ~= "" then
+            _G.globalUsername = name
+            Config.set("username", name)
+        end
+        appState = "SETTINGS"
+        setupSettingsUI()
+    end)
+end
+
+function setupSettingsUI()
+    UI.clear()
+    local cx, cy = _G.getW() / 2, _G.getH() / 2
+    UI.addLabel("lbl_settings", "Network Settings", cx - 70, cy - 170)
+    
+    UI.addLabel("lbl_uri_hint", "Server URI (tcp://, udp://, ws://, wss://)", cx - 250, cy - 110)
+    UI.addTextInput("input_uri", "e.g. wss://127.0.0.1:8080", cx - 250, cy - 80, 500, 40)
+    UI.setText("input_uri", Config.get("server_uri") or "")
+    
+    UI.addButton("btn_save_settings", "Save & Back", cx - 100, cy + 80, 200, 50, function()
+        local uri = UI.getText("input_uri")
+        if uri and #uri > 0 then
+            Config.set("server_uri", uri)
+        end
+        appState = "MENU"
+        setupMenuUI()
     end)
 end
 

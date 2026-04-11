@@ -126,11 +126,14 @@ function UI.draw()
                 txt = w.placeholder
             end
             local th = UI.font:getHeight()
+            local tw = UI.font:getWidth(txt)
+            local tx = w.x + 10
             
-            -- Keep text within bounds (simple clip)
-            -- love.graphics.setScissor(w.x + 5, w.y, w.w - 10, w.h)
-            love.graphics.print(txt, w.x + 10, w.y + w.h/2 - th/2)
-            -- love.graphics.setScissor()
+            if tw > w.w - 20 then
+                tx = w.x + w.w - 10 - tw
+            end
+            
+            love.graphics.print(txt, tx, w.y + w.h/2 - th/2)
         end
     end
 end
@@ -157,12 +160,21 @@ function UI.textinput(t)
 end
 
 function UI.keypressed(key)
+    local isCtrlOrCmd = love.keyboard.isDown("lctrl", "rctrl", "lgui", "rgui")
+    
     for _, w in ipairs(widgets) do
         if w.type == "textinput" and w.focused then
             if key == "backspace" then
                 local byteoffset = utf8.offset(w.text, -1)
                 if byteoffset then
                     w.text = string.sub(w.text, 1, byteoffset - 1)
+                end
+            elseif isCtrlOrCmd and key == "v" then
+                local clipboardText = love.system.getClipboardText()
+                if clipboardText and #clipboardText > 0 then
+                    -- Sanitize simple newlines possibly
+                    clipboardText = clipboardText:gsub("\r", ""):gsub("\n", "")
+                    w.text = w.text .. clipboardText
                 end
             end
         end

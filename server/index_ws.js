@@ -32,7 +32,7 @@ const server = http.createServer((req, res) => {
         res.write('<html><head><title>DevilBridge Rooms</title>');
         res.write('<style>body{font-family:sans-serif;padding:2rem} .room{background:#eee;padding:10px;margin-bottom:10px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);}</style></head><body>');
         res.write('<h1>DevilBridge Game Server</h1>');
-        res.write('<p>WebSocket server is running. Connect using wss://devilbridge.onrender.com</p>');
+        res.write('<p>WebSocket server is running. Connect using ws://devilbridge.onrender.com</p>');
         res.write('<h2>Available Game Rooms</h2>');
         let activeRooms = Array.from(rooms.values());
         if (activeRooms.length === 0) {
@@ -52,27 +52,7 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocket.Server({ server });
 
-const interval = setInterval(() => {
-    wss.clients.forEach((ws) => {
-        if (ws.isAlive === false) {
-            console.log("Terminating inactive client due to ping timeout");
-            return ws.terminate();
-        }
-        ws.isAlive = false;
-        ws.ping();
-    });
-}, 30000);
-
-wss.on('close', () => {
-    clearInterval(interval);
-});
-
 wss.on('connection', (socket, req) => {
-    socket.isAlive = true;
-    socket.on('pong', () => {
-        socket.isAlive = true;
-    });
-
     console.log(`New WebSocket connection from ${req.socket.remoteAddress}`);
     const clientId = createUniqueId();
     clients.set(clientId, socket);

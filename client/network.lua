@@ -1,8 +1,11 @@
 local websocket = require("websocket")
 local json = require("json")
+local socket = require("socket")
+local Config = require("config")
 
 local Network = {}
 Network.ws = nil
+Network.protocol = "ws"
 Network.roomCode = nil
 Network.isHost = false
 Network.clientId = nil
@@ -12,17 +15,39 @@ function Network.load()
     -- Nothing for now
 end
 
-function Network.connect(host, port, secure)
-    local scheme = secure and "wss" or "ws"
-    local url = scheme .. "://" .. host .. ":" .. port
-    local client = websocket.client.sync()
-    local ok, err = client:connect(url)
-    if not ok then
-        print("Connected failed: " .. tostring(err))
-        return
+function Network.connect(uri)
+    if not uri or uri == "" then return end
+    local scheme, host, port = uri:match("^(%w+)://([^:]+):(%d+)$")
+    if not scheme then 
+        print("Invalid URI format")
+        return 
     end
-    client.sock:settimeout(0)
-    Network.ws = client
+    
+    Network.protocol = scheme
+    print("Connecting via " .. scheme .. " to " .. host .. ":" .. port)
+    
+    if scheme == "ws" or scheme == "wss" then
+        local client = websocket.client.sync()
+        local ok, err = client:connect(uri)
+        if not ok then
+            print("Connected failed: " .. tostring(err))
+            return
+        end
+        client.sock:settimeout(0)
+        Network.ws = client
+    elseif scheme == "tcp" then
+        local client = socket.tcp()
+        client:settimeout(0)
+        client:connect(host, port)
+        Network.ws = client
+    elseif scheme == "udp" then
+        local client = socket.udp()
+        client:settimeout(0)
+        client:setpeername(host, port)
+        Network.ws = client
+    else
+        print("Unsupported protocol: " .. scheme)
+    end
 end
 
 function Network.disconnect()
@@ -36,13 +61,13 @@ function Network.disconnect()
 end
 
 function Network.connectAsHost(name)
-    Network.connect("127.0.0.1", 8080, false)
+    Network.connect(Config.get("server_uri"))
     Network.isHost = true
     Network.send({ type = "CREATE_ROOM", name = name or "Host" })
 end
 
 function Network.connectAsGuest(code, name)
-    Network.connect("127.0.0.1", 8080, false)
+    Network.connect(Config.get("server_uri"))
     Network.isHost = false
     Network.send({ type = "JOIN_ROOM", code = code, name = name })
 end
@@ -50,7 +75,11 @@ end
 function Network.send(data)
     if Network.ws then
         local str = json.encode(data)
-        Network.ws:send(str)
+        if Network.protocol == "tcp" then
+            Network.ws:send(str .. "\n")
+        else
+            Network.ws:send(str)
+        end
     end
 end
 
@@ -66,19 +95,46 @@ end
 function Network.update(dt)
     if not Network.ws then return end
     
-    while true do
-        local data, opcode, clean, close_code, err = Network.ws:receive()
-        if data then
-            local ok, msg = pcall(json.decode, data)
-            if ok and msg then
-                Network.handleSystemMessage(msg)
+    if Network.protocol == "ws" or Network.protocol == "wss" then
+        while true do
+            local data, opcode, clean, close_code, err = Network.ws:receive()
+            if data then
+                local ok, msg = pcall(json.decode, data)
+                if ok and msg then Network.handleSystemMessage(msg) end
+            elseif err == "timeout" then
+                break
+            elseif err then
+                if _G.handleNetworkEvent then _G.handleNetworkEvent({ type = "DISCONNECT", reason = "Server connection closed." }) end
+                Network.disconnect()
+                break
             end
-        elseif err == "timeout" then
-            break
-        elseif err then
-            if _G.handleNetworkEvent then _G.handleNetworkEvent({ type = "DISCONNECT", reason = "Server connection closed." }) end
-            Network.disconnect()
-            break
+        end
+    elseif Network.protocol == "tcp" then
+        while true do
+            local data, err, partial = Network.ws:receive("*l")
+            if data then
+                local ok, msg = pcall(json.decode, data)
+                if ok and msg then Network.handleSystemMessage(msg) end
+            elseif err == "timeout" then
+                break
+            elseif err then
+                if _G.handleNetworkEvent then _G.handleNetworkEvent({ type = "DISCONNECT", reason = "Server connection closed." }) end
+                Network.disconnect()
+                break
+            end
+        end
+    elseif Network.protocol == "udp" then
+        while true do
+            local data, err = Network.ws:receive()
+            if data then
+                local ok, msg = pcall(json.decode, data)
+                if ok and msg then Network.handleSystemMessage(msg) end
+            elseif err == "timeout" then
+                break
+            elseif err then
+                -- UDP doesn't normally 'close' in the same way, but network errors can happen
+                break
+            end
         end
     end
 end
