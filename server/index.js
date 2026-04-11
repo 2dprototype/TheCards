@@ -10,7 +10,6 @@ const clients = new Map();
 
 function generateCode() {
     let id = "";
-    // const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     const chars = "0123456789";
     for(let i=0; i<5; i++){
         id += chars.charAt(Math.floor(Math.random() * chars.length));
@@ -25,11 +24,16 @@ function createUniqueId() {
 }
 
 const server = http.createServer((req, res) => {
+    // Log all requests for debugging
+    console.log(`${req.method} ${req.url} - Upgrade: ${req.headers.upgrade || 'none'}`);
+    
     if (req.method === 'GET' && req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.write('<html><head><title>DevilBridge Rooms</title>');
         res.write('<style>body{font-family:sans-serif;padding:2rem} .room{background:#eee;padding:10px;margin-bottom:10px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);}</style></head><body>');
-        res.write('<h1>Available Game Rooms</h1>');
+        res.write('<h1>DevilBridge Game Server</h1>');
+        res.write('<p>WebSocket server is running. Connect using wss://devilbridge.onrender.com</p>');
+        res.write('<h2>Available Game Rooms</h2>');
         let activeRooms = Array.from(rooms.values());
         if (activeRooms.length === 0) {
             res.write('<p>No active rooms right now.</p>');
@@ -48,7 +52,8 @@ const server = http.createServer((req, res) => {
 
 const wss = new WebSocket.Server({ server });
 
-wss.on('connection', (socket) => {
+wss.on('connection', (socket, req) => {
+    console.log(`New WebSocket connection from ${req.socket.remoteAddress}`);
     const clientId = createUniqueId();
     clients.set(clientId, socket);
     socket.roomId = null; // Track which room this socket is in
@@ -62,13 +67,15 @@ wss.on('connection', (socket) => {
     }
 
     sendMsg({ type: "HELLO", clientId });
+    console.log(`Sent HELLO to ${clientId}`);
 
     socket.on('message', (message) => {
         try {
             const msg = JSON.parse(message);
+            console.log(`Received from ${clientId}:`, msg.type);
             handleMessage(socket, clientId, msg);
         } catch (e) {
-            console.error("Failed to parse JSON:", message, e);
+            console.error("Failed to parse JSON:", message.toString(), e);
         }
     });
 
@@ -117,17 +124,15 @@ function handleMessage(socket, clientId, msg) {
                 code: code,
                 clients: new Map()
             });
-            // Host is implicitly part of clients? Let's just track them separately or together.
-            // rooms.get(code).clients.set(clientId, socket); => no, host is host.
             socket.send(JSON.stringify({ type: "ROOM_CREATED", code }));
             console.log(`Room ${code} created by ${clientId}`);
             break;
 
         case "JOIN_ROOM":
+            console.log(`JOIN_ROOM attempt: ${msg.code}, rooms: ${Array.from(rooms.keys())}`);
             if (msg.code && rooms.has(msg.code)) {
                 const room = rooms.get(msg.code);
                 if (room.clients.size >= 3) {
-                    // Maximum 3 guests + 1 host
                     socket.send(JSON.stringify({ type: "ERROR", message: "Room is full" }));
                     return;
                 }
@@ -136,13 +141,12 @@ function handleMessage(socket, clientId, msg) {
                 
                 socket.send(JSON.stringify({ type: "JOIN_SUCCESS", code: msg.code }));
                 
-                // Notify host
                 const hostSock = clients.get(room.hostId);
                 if (hostSock && hostSock.readyState === WebSocket.OPEN) {
                     hostSock.send(JSON.stringify({ 
                         type: "CLIENT_JOINED", 
                         clientId: clientId,
-                        name: msg.name // optional display name
+                        name: msg.name || "Anonymous"
                     }));
                 }
                 console.log(`Client ${clientId} joined room ${msg.code}`);
@@ -152,7 +156,6 @@ function handleMessage(socket, clientId, msg) {
             break;
             
         case "HOST_MSG":
-            // Host sending message to a specific client or all clients
             if (socket.roomId && rooms.has(socket.roomId)) {
                 const room = rooms.get(socket.roomId);
                 if (room.hostId === clientId) {
@@ -173,7 +176,6 @@ function handleMessage(socket, clientId, msg) {
             break;
 
         case "CLIENT_MSG":
-            // Client sending message to host
             if (socket.roomId && rooms.has(socket.roomId)) {
                 const room = rooms.get(socket.roomId);
                 if (room.clients.has(clientId)) {
@@ -192,5 +194,7 @@ function handleMessage(socket, clientId, msg) {
 }
 
 server.listen(PORT, () => {
-    console.log(`Relay Server listening on port ${PORT}`);
+    console.log(`DevilBridge Relay Server listening on port ${PORT}`);
+    console.log(`WebSocket endpoint: ws://localhost:${PORT}`);
+    console.log(`HTTP endpoint: http://localhost:${PORT}`);
 });
