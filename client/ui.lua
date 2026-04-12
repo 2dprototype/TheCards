@@ -143,10 +143,11 @@ function UI.mousepressed(x, y, button)
         for _, w in ipairs(widgets) do
             if w.type == "textinput" then
                 w.focused = (x >= w.x and x <= w.x + w.w and y >= w.y and y <= w.y + w.h)
+            elseif w.type == "button" then
+                if x >= w.x and x <= w.x + w.w and y >= w.y and y <= w.y + w.h then
+                    if w.onClick then w.onClick() end
+                end
             end
-        end
-        if activeWidget and activeWidget.isHovered and activeWidget.onClick then
-            activeWidget.onClick()
         end
     end
 end

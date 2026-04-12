@@ -8,110 +8,156 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"path/filepath"
 
 	"github.com/gorilla/websocket"
 )
 
-// ClientState represents a connected local client
-type ClientState struct {
-	localSocket   *websocket.Conn
-	remoteSocket  *websocket.Conn
-	roomID        string
-	hostID        string
-	messageQueue  [][]byte
-	mu            sync.Mutex
+// To use godotenv if needed, but we can just implement a simple .env loader
+// since we want proxy.go to behave exactly like proxy.js require('dotenv').config()
+func loadDotEnv() {
+    exePath, err := os.Executable()
+    if err != nil {
+        log.Printf("Warning: Could not determine executable path: %v", err)
+        return
+    }
+    
+    exeDir := filepath.Dir(exePath)
+    envPath := filepath.Join(exeDir, ".env")
+    
+    file, err := os.Open(envPath)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if len(line) == 0 || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			// Strip quotes if any
+			val = strings.Trim(val, `"'`)
+			os.Setenv(key, val)
+		}
+	}
 }
 
-// Config holds application configuration
-type Config struct {
-	LocalPort string
-	RemoteURL string
+type ClientState struct {
+	localSocket  *websocket.Conn
+	remoteSocket *websocket.Conn
+	roomID       string
+	hostID       string
+	messageQueue [][]byte
+	mu           sync.Mutex
 }
 
 var (
-	config       Config
-	localClients sync.Map // string -> *ClientState
+	localPort    string
+	remoteURL    string
+	localClients sync.Map
 	nextLocalID  uint64
 	upgrader     = websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool { return true },
 	}
-	exePath, _ = os.Executable()
-	exeDir     = filepath.Dir(exePath)
-	exeName    = strings.TrimSuffix(filepath.Base(exePath), filepath.Ext(exePath))
-	configPath = filepath.Join(exeDir, exeName+".ini")
 )
 
 func createLocalID() string {
 	id := atomic.AddUint64(&nextLocalID, 1)
-	return fmt.Sprintf("L%d_%d", id, time.Now().UnixNano())
+	return fmt.Sprintf("L%d_%d", id, time.Now().UnixMilli())
 }
 
-func loadConfig() error {
-	config.LocalPort = "8080"
-	config.RemoteURL = ""
+func main() {
+	loadDotEnv()
 
-	file, err := os.Open(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
+	localPort = os.Getenv("LOCAL_PORT")
+	if localPort == "" {
+		localPort = "8080"
 	}
-	defer file.Close()
+	remoteURL = os.Getenv("REMOTE_URL")
 
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
-			continue
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		switch strings.ToUpper(key) {
-		case "LOCAL_PORT":
-			config.LocalPort = value
-		case "REMOTE_URL":
-			config.RemoteURL = value
-		}
+	if remoteURL == "" {
+		fmt.Fprintln(os.Stderr, "Error: REMOTE_URL environment variable is required")
+		os.Exit(1)
 	}
-	return scanner.Err()
+
+	server := &http.Server{
+		Addr:    "0.0.0.0:" + localPort,
+		Handler: http.HandlerFunc(handleHTTP),
+	}
+
+	// Handle graceful shutdown
+	go func() {
+		sigChan := make(chan os.Signal, 1)
+		signal.Notify(sigChan, os.Interrupt)
+		<-sigChan
+		
+		fmt.Println("\nShutting down proxy...")
+		localClients.Range(func(key, value interface{}) bool {
+			state := value.(*ClientState)
+			state.mu.Lock()
+			if state.remoteSocket != nil {
+				state.remoteSocket.Close()
+			}
+			if state.localSocket != nil {
+				state.localSocket.Close()
+			}
+			state.mu.Unlock()
+			return true
+		})
+		
+		server.Close()
+		fmt.Println("Proxy stopped.")
+		os.Exit(0)
+	}()
+
+	fmt.Println(strings.Repeat("=", 60))
+	fmt.Println("DevilBridge Local Proxy Server")
+	fmt.Println(strings.Repeat("=", 60))
+	fmt.Printf("Local WebSocket endpoint: ws://0.0.0.0:%s\n", localPort)
+	fmt.Printf("Local HTTP endpoint: http://0.0.0.0:%s\n", localPort)
+	fmt.Printf("Remote server: %s\n", remoteURL)
+	fmt.Println(strings.Repeat("=", 60))
+	fmt.Println("\nProxy is running! Connect your game client to:")
+	fmt.Printf("   ws://localhost:%s\n", localPort)
+	fmt.Println("\nStatus page available at:")
+	fmt.Printf("   http://localhost:%s\n", localPort)
+	fmt.Println(strings.Repeat("=", 60))
+
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("Server error: %v", err)
+	}
 }
 
-func saveConfig() error {
-	content := fmt.Sprintf(`# DevilBridge Local Proxy Configuration
-LOCAL_PORT=%s
-REMOTE_URL=%s
-`, config.LocalPort, config.RemoteURL)
-	return os.WriteFile(configPath, []byte(content), 0644)
-}
-
-func handleStatusPage(w http.ResponseWriter, r *http.Request) {
-	if r.Method != "GET" {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+func handleHTTP(w http.ResponseWriter, r *http.Request) {
+	// Equivalent to parsing upgrade or normal request
+	if r.Header.Get("Upgrade") == "websocket" {
+		handleWebSocket(w, r)
 		return
 	}
 
-	if r.URL.Path == "/" {
+	fmt.Printf("%s %s\n", r.Method, r.URL.Path)
+
+	if r.Method == "GET" && r.URL.Path == "/" {
 		w.Header().Set("Content-Type", "text/html")
 		
-		clientsHTML := ""
 		count := 0
+		clientsHTML := ""
 		localClients.Range(func(key, value interface{}) bool {
+			count++
 			id := key.(string)
 			state := value.(*ClientState)
-			roomID := state.roomID
-			if roomID == "" {
-				roomID = "None"
+			room := state.roomID
+			if room == "" {
+				room = "None"
 			}
 			isHost := "No"
 			if state.hostID == id {
@@ -120,12 +166,12 @@ func handleStatusPage(w http.ResponseWriter, r *http.Request) {
 			clientsHTML += fmt.Sprintf(`
                     <div class="client">
                         <pre>ID: %s<br>Room: %s<br>Host: %s</pre>
-                    </div>`, id, roomID, isHost)
-			count++
+                    </div>
+                `, id, room, isHost)
 			return true
 		})
-
-		if clientsHTML == "" {
+		
+		if count == 0 {
 			clientsHTML = "<p>No active connections</p>"
 		}
 
@@ -142,354 +188,193 @@ func handleStatusPage(w http.ResponseWriter, r *http.Request) {
                 .client { background: #252526; padding: 0.5rem; margin: 0.5rem 0; border-left: 3px solid #4ec9b0; }
                 pre { margin: 0; }
             </style>
-            <meta http-equiv="refresh" content="5">
         </head>
         <body>
             <h1>DevilBridge Local Proxy</h1>
             <div class="status">
-                <strong>Status:</strong> <span class="connected">● RUNNING</span><br>
+                <strong>Status:</strong> <span class="connected">RUNNING</span><br>
                 <strong>Remote Server:</strong> %s<br>
-                <strong>Active Clients:</strong> %d
+                <strong>Active Clients:</strong> <span id="clientCount">%d</span>
             </div>
             <h2>Active Connections</h2>
             <div id="clients">
                 %s
             </div>
-            <p style="margin-top: 2rem; font-size: 0.8rem;">Connect using: <strong>ws://localhost:%s</strong></p>
+            <p style="margin-top: 2rem; font-size: 0.8rem;">Connect using: <strong>ws://localhost:8080</strong></p>
         </body>
-        </html>`, config.RemoteURL, count, clientsHTML, config.LocalPort)
-		
-		fmt.Fprint(w, html)
-	} else if r.URL.Path == "/status" {
+        </html>`, remoteURL, count, clientsHTML)
+        
+		w.Write([]byte(html))
+	} else if r.Method == "GET" && r.URL.Path == "/status" {
 		w.Header().Set("Content-Type", "application/json")
 		
-		clients := []map[string]interface{}{}
+		clientsArr := make([]map[string]interface{}, 0)
 		localClients.Range(func(key, value interface{}) bool {
 			id := key.(string)
 			state := value.(*ClientState)
-			clients = append(clients, map[string]interface{}{
+			clientsArr = append(clientsArr, map[string]interface{}{
 				"id":     id,
 				"roomId": state.roomID,
 				"isHost": state.hostID == id,
 			})
-			return true
+			return true		
 		})
-
-		response := map[string]interface{}{
-			"status":        "running",
-			"remoteServer":  config.RemoteURL,
-			"activeClients": len(clients),
-			"clients":       clients,
+		
+		resp := map[string]interface{}{
+			"status": "running",
+			"remoteServer": remoteURL,
+			"activeClients": len(clientsArr),
+			"clients": clientsArr,
 		}
-		json.NewEncoder(w).Encode(response)
+		json.NewEncoder(w).Encode(resp)
 	} else {
-		http.NotFound(w, r)
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("Not found"))
 	}
 }
 
 func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	localSocket, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("[ERROR] Failed to upgrade connection: %v", err)
+		fmt.Printf("Upgrade error: %v\n", err)
 		return
 	}
 
 	localClientID := createLocalID()
-	log.Printf("[LOCAL] New client connected: %s", localClientID)
+	fmt.Printf("[LOCAL] New client connected: %s\n", localClientID)
 
 	state := &ClientState{
 		localSocket:  localSocket,
-		remoteSocket: nil,
-		roomID:       "",
-		hostID:       "",
 		messageQueue: make([][]byte, 0),
 	}
 	localClients.Store(localClientID, state)
 
-	log.Printf("[REMOTE] Connecting to remote server for %s...", localClientID)
-
-	remoteSocket, _, err := websocket.DefaultDialer.Dial(config.RemoteURL, nil)
+	fmt.Printf("[REMOTE] Connecting to remote server for %s...\n", localClientID)
+	
+	dialer := websocket.DefaultDialer
+	remoteSocket, _, err := dialer.Dial(remoteURL, nil)
 	if err != nil {
-		log.Printf("[REMOTE] Failed to create connection for %s: %v", localClientID, err)
+		fmt.Printf("[REMOTE] Failed to create connection for %s: %v\n", localClientID, err)
+		localSocket.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(1011, "Internal Error"), time.Now().Add(time.Second))
 		localSocket.Close()
 		localClients.Delete(localClientID)
 		return
 	}
+	
+	state.mu.Lock()
 	state.remoteSocket = remoteSocket
+	queue := state.messageQueue
+	state.messageQueue = nil // empty it out
+	state.mu.Unlock()
 
-	// Handle remote -> local messages
+	fmt.Printf("[REMOTE] Connected for client %s\n", localClientID)
+
+	// Send queued messages
+	for _, msgData := range queue {
+		err := remoteSocket.WriteMessage(websocket.TextMessage, msgData)
+		if err != nil {
+			fmt.Printf("[REMOTE] Error sending queued message for %s: %v\n", localClientID, err)
+		}
+	}
+
+	// Read from remote
 	go func() {
 		defer func() {
-			remoteSocket.Close()
-			localSocket.Close()
+			fmt.Printf("[REMOTE] Disconnected for client %s\n", localClientID)
+			
+			state.mu.Lock()
+			if state.localSocket != nil {
+				errMsg, _ := json.Marshal(map[string]string{
+					"type": "ERROR",
+					"message": "Connection to remote server lost",
+				})
+				state.localSocket.WriteMessage(websocket.TextMessage, errMsg)
+				state.localSocket.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(1011, "Remote connection lost"), time.Now().Add(time.Second))
+				state.localSocket.Close()
+			}
+			state.mu.Unlock()
 			localClients.Delete(localClientID)
 		}()
 
 		for {
 			_, message, err := remoteSocket.ReadMessage()
 			if err != nil {
-				log.Printf("[REMOTE] Disconnected for client %s: %v", localClientID, err)
-				
-				// Send error to local client before closing
-				errMsg := map[string]string{
-					"type":    "ERROR",
-					"message": "Connection to remote server lost",
-				}
-				if jsonData, err := json.Marshal(errMsg); err == nil {
-					localSocket.WriteMessage(websocket.TextMessage, jsonData)
-				}
 				return
 			}
-
-			// Parse and track room state
+			
+			msgStr := string(message)
+			fmt.Printf("[PROXY] Remote -> Local (%s): %s\n", localClientID, msgStr)
+			
 			var msg map[string]interface{}
-			if err := json.Unmarshal(message, &msg); err == nil {
+			if json.Unmarshal(message, &msg) == nil {
 				msgType, _ := msg["type"].(string)
-				log.Printf("[PROXY] Remote -> Local (%s): %s", localClientID, msgType)
-
+				
 				state.mu.Lock()
-				switch msgType {
-				case "ROOM_CREATED":
+				if msgType == "ROOM_CREATED" {
 					if code, ok := msg["code"].(string); ok {
 						state.roomID = code
 						state.hostID = localClientID
 					}
-				case "JOIN_SUCCESS":
+				} else if msgType == "JOIN_SUCCESS" {
 					if code, ok := msg["code"].(string); ok {
 						state.roomID = code
 					}
-				case "ROOM_CLOSED":
+				} else if msgType == "ROOM_CLOSED" {
 					state.roomID = ""
 					state.hostID = ""
 				}
 				state.mu.Unlock()
+			} else {
+				fmt.Printf("[PROXY] Error parsing remote message: %v\n", err)
 			}
-
-			if err := localSocket.WriteMessage(websocket.TextMessage, message); err != nil {
-				log.Printf("[LOCAL] Error sending to client %s: %v", localClientID, err)
-				return
+			
+			state.mu.Lock()
+			if state.localSocket != nil {
+				state.localSocket.WriteMessage(websocket.TextMessage, message)
 			}
+			state.mu.Unlock()
 		}
 	}()
 
-	// Handle local -> remote messages
+	// Read from local
 	go func() {
 		defer func() {
-			remoteSocket.Close()
-			localSocket.Close()
+			fmt.Printf("[LOCAL] Client disconnected: %s\n", localClientID)
+			state.mu.Lock()
+			if state.remoteSocket != nil {
+				state.remoteSocket.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(1000, "Local client disconnected"), time.Now().Add(time.Second))
+				state.remoteSocket.Close()
+			}
+			state.mu.Unlock()
 			localClients.Delete(localClientID)
 		}()
 
 		for {
 			_, message, err := localSocket.ReadMessage()
 			if err != nil {
-				log.Printf("[LOCAL] Client disconnected: %s", localClientID)
-				remoteSocket.WriteMessage(websocket.CloseMessage, 
-					websocket.FormatCloseMessage(websocket.CloseNormalClosure, "Local client disconnected"))
+				fmt.Printf("[LOCAL] Socket error for %s: %v\n", localClientID, err)
 				return
 			}
-
-			// Log message type if JSON
+			
+			msgStr := string(message)
 			var msg map[string]interface{}
-			if err := json.Unmarshal(message, &msg); err == nil {
-				msgType, _ := msg["type"].(string)
-				log.Printf("[PROXY] Local -> Remote (%s): %s", localClientID, msgType)
+			if json.Unmarshal(message, &msg) == nil {
+				fmt.Printf("[PROXY] Local -> Remote (%s): %s\n", localClientID, msgStr)
 			} else {
-				log.Printf("[PROXY] Local -> Remote (%s): [Invalid JSON]", localClientID)
+				fmt.Printf("[PROXY] Local -> Remote (%s): [Invalid JSON] %s\n", localClientID, msgStr)
 			}
-
+			
 			state.mu.Lock()
-			if err := remoteSocket.WriteMessage(websocket.TextMessage, message); err != nil {
-				log.Printf("[REMOTE] Error sending from %s: %v", localClientID, err)
+			if state.remoteSocket != nil {
+				err := state.remoteSocket.WriteMessage(websocket.TextMessage, message)
+				if err != nil {
+					fmt.Printf("[PROXY] Error handling local message: %v\n", err)
+				}
+			} else {
+				fmt.Printf("[PROXY] Queuing message for remote...\n")
+				state.messageQueue = append(state.messageQueue, message)
 			}
 			state.mu.Unlock()
 		}
 	}()
-}
-
-func runServer() {
-	if config.RemoteURL == "" {
-		log.Fatal("Error: REMOTE_URL configuration is required")
-	}
-
-	http.HandleFunc("/", handleStatusPage)
-	http.HandleFunc("/ws", handleWebSocket)
-
-	addr := ":" + config.LocalPort
-	log.Println(strings.Repeat("=", 60))
-	log.Println("DevilBridge Local Proxy Server")
-	log.Println(strings.Repeat("=", 60))
-	log.Printf("Local WebSocket endpoint: ws://localhost%s/ws", addr)
-	log.Printf("Local HTTP endpoint: http://localhost%s", addr)
-	log.Printf("Remote server: %s", config.RemoteURL)
-	log.Println(strings.Repeat("=", 60))
-	log.Println("\nProxy is running! Connect your game client to:")
-	log.Printf("   ws://localhost%s/ws", addr)
-	log.Println("\nStatus page available at:")
-	log.Printf("   http://localhost%s", addr)
-	log.Println(strings.Repeat("=", 60))
-
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		log.Fatal(err)
-	}
-}
-
-func printUsage() {
-	fmt.Printf(`DevilBridge Local Proxy - Configuration Management
-
-Usage: %s [command]
-
-Commands:
-  (no args)          Run the proxy server
-  help               Show this help message
-  config             Show current configuration
-  set <key> <value>  Set a configuration value
-  get <key>          Get a configuration value
-  delete <key>       Delete a configuration value (reset to default)
-  reset              Reset all configuration to defaults
-
-Configuration Keys:
-  LOCAL_PORT         Local port for the proxy server (default: 8080)
-  REMOTE_URL         Remote WebSocket server URL (required)
-
-Examples:
-  %s                                    Run the server
-  %s config                             Show current config
-  %s set REMOTE_URL ws://example.com    Set remote URL
-  %s set LOCAL_PORT 9090                Set local port
-  %s get REMOTE_URL                     Get remote URL
-  %s delete LOCAL_PORT                  Reset local port to default
-  %s reset                              Reset all settings
-
-Configuration file location: %s
-`, exeName, exeName, exeName, exeName, exeName, exeName, exeName, exeName, configPath)
-}
-
-func main() {
-	if err := loadConfig(); err != nil {
-		log.Printf("Warning: Could not load config: %v", err)
-	}
-
-	// Handle CLI commands
-	if len(os.Args) > 1 {
-		command := strings.ToLower(os.Args[1])
-		
-		switch command {
-		case "help", "-h", "--help":
-			printUsage()
-			return
-			
-		case "config":
-			fmt.Printf("Configuration file: %s\n\n", configPath)
-			fmt.Printf("LOCAL_PORT = %s\n", config.LocalPort)
-			fmt.Printf("REMOTE_URL = %s\n", config.RemoteURL)
-			return
-			
-		case "get":
-			if len(os.Args) < 3 {
-				fmt.Println("Error: Missing key name")
-				fmt.Println("Usage: get <key>")
-				os.Exit(1)
-			}
-			key := strings.ToUpper(os.Args[2])
-			switch key {
-			case "LOCAL_PORT":
-				fmt.Println(config.LocalPort)
-			case "REMOTE_URL":
-				fmt.Println(config.RemoteURL)
-			default:
-				fmt.Printf("Error: Unknown key '%s'\n", os.Args[2])
-				os.Exit(1)
-			}
-			return
-			
-		case "set":
-			if len(os.Args) < 4 {
-				fmt.Println("Error: Missing key or value")
-				fmt.Println("Usage: set <key> <value>")
-				os.Exit(1)
-			}
-			key := strings.ToUpper(os.Args[2])
-			value := strings.Join(os.Args[3:], " ")
-			
-			switch key {
-			case "LOCAL_PORT":
-				config.LocalPort = value
-			case "REMOTE_URL":
-				config.RemoteURL = value
-			default:
-				fmt.Printf("Error: Unknown key '%s'\n", os.Args[2])
-				os.Exit(1)
-			}
-			
-			if err := saveConfig(); err != nil {
-				fmt.Printf("Error saving configuration: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Printf("Configuration updated: %s = %s\n", key, value)
-			return
-			
-		case "delete":
-			if len(os.Args) < 3 {
-				fmt.Println("Error: Missing key name")
-				fmt.Println("Usage: delete <key>")
-				os.Exit(1)
-			}
-			key := strings.ToUpper(os.Args[2])
-			switch key {
-			case "LOCAL_PORT":
-				config.LocalPort = "8080"
-			case "REMOTE_URL":
-				config.RemoteURL = ""
-			default:
-				fmt.Printf("Error: Unknown key '%s'\n", os.Args[2])
-				os.Exit(1)
-			}
-			
-			if err := saveConfig(); err != nil {
-				fmt.Printf("Error saving configuration: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Printf("Configuration deleted: %s (reset to default)\n", key)
-			return
-			
-		case "reset":
-			config.LocalPort = "8080"
-			config.RemoteURL = ""
-			if err := saveConfig(); err != nil {
-				fmt.Printf("Error saving configuration: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Println("Configuration reset to defaults")
-			return
-			
-		default:
-			fmt.Printf("Error: Unknown command '%s'\n", command)
-			fmt.Printf("Run '%s help' for usage information\n", exeName)
-			os.Exit(1)
-		}
-	}
-
-	// Run server (no arguments)
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt)
-
-	go runServer()
-
-	<-sigChan
-	log.Println("\nShutting down proxy...")
-	
-	// Close all connections
-	localClients.Range(func(key, value interface{}) bool {
-		state := value.(*ClientState)
-		if state.remoteSocket != nil {
-			state.remoteSocket.Close()
-		}
-		if state.localSocket != nil {
-			state.localSocket.Close()
-		}
-		return true
-	})
-	
-	log.Println("Proxy stopped.")
 }

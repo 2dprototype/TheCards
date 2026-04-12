@@ -54,11 +54,9 @@ const wss = new WebSocket.Server({ server });
 
 const interval = setInterval(() => {
     wss.clients.forEach((ws) => {
-        if (ws.isAlive === false) {
-            console.log("Terminating inactive client due to ping timeout");
-            return ws.terminate();
-        }
-        ws.isAlive = false;
+        // Just send a ping to keep NAT/Load balancers alive.
+        // We do not terminate if the client doesn't pong, to remain compatible with
+        // the local Game Client running without an underlying ping/pong framework.
         ws.ping();
     });
 }, 30000);

@@ -1,5 +1,7 @@
 local Bot = {}
 
+local rankValues = {["2"]=2, ["3"]=3, ["4"]=4, ["5"]=5, ["6"]=6, ["7"]=7, ["8"]=8, ["9"]=9, ["10"]=10, ["J"]=11, ["Q"]=12, ["K"]=13, ["A"]=14}
+
 -- Evaluates hand to make a reasonable call (guess how many tricks it can win)
 function Bot.makeCall(hand)
     local call = 0
@@ -10,8 +12,8 @@ function Bot.makeCall(hand)
         
         -- High cards evaluate to calls
         if card.rank == "A" then call = call + 1
-        elseif card.rank == "K" and card.suit == "S" then call = call + 1
-        elseif card.rank == "K" and math.random() > 0.5 then call = call + 1
+        elseif card.rank == "K" then call = call + 0.5
+        elseif card.rank == "Q" and card.suit == "S" then call = call + 0.5
         end
     end
     
@@ -20,7 +22,9 @@ function Bot.makeCall(hand)
         call = call + (counts["S"] - 4)
     end
     
-    -- Minimum call is 1 usually, but let's say minimum is 1 for bot safety
+    call = math.floor(call + 0.5)
+    
+    -- Minimum call is 1 usually, max 8
     if call < 1 then call = 1 end
     if call > 8 then call = 8 end
     
@@ -28,7 +32,7 @@ function Bot.makeCall(hand)
 end
 
 -- Chooses a card to play based on the current trick and hand
-function Bot.playCard(hand, trickLeadSuit)
+function Bot.playCard(hand, trickLeadSuit, trick, myCall, myTricksWon)
     local validCards = {}
     
     -- Filter valid cards according to follow suit rule
@@ -47,10 +51,73 @@ function Bot.playCard(hand, trickLeadSuit)
         end
     end
     
-    -- Extremely simple AI: Play random valid card
-    -- For a "better" bot, it would try to win if it hasn't reached its call, or lose if it has.
-    local choiceIdx = math.random(1, #validCards)
-    local chosenCard = validCards[choiceIdx]
+    -- Need to know if we want to win this trick
+    local needTricks = (myTricksWon or 0) < (myCall or 1)
+    
+    -- Evaluate the current winning card in the trick
+    local bestCard = nil
+    if trick and #trick > 0 then
+        bestCard = trick[1].card
+        for i = 2, #trick do
+            local c = trick[i].card
+            local isSpade = (c.suit == "S")
+            local bestIsSpade = (bestCard.suit == "S")
+            if isSpade and not bestIsSpade then
+                bestCard = c
+            elseif isSpade and bestIsSpade and rankValues[c.rank] > rankValues[bestCard.rank] then
+                bestCard = c
+            elseif c.suit == trickLeadSuit and bestCard.suit == trickLeadSuit and rankValues[c.rank] > rankValues[bestCard.rank] then
+                bestCard = c
+            end
+        end
+    end
+    
+    -- Sort valid cards from lowest value to highest value
+    table.sort(validCards, function(a, b) 
+        -- Make Spades artificially higher value so bots don't waste spades if they don't have to
+        local aVal = rankValues[a.rank] + (a.suit == "S" and 20 or 0)
+        local bVal = rankValues[b.rank] + (b.suit == "S" and 20 or 0)
+        return aVal < bVal
+    end)
+    
+    local chosenCard = validCards[1] -- default lowest
+    
+    if needTricks then
+        if not bestCard then
+            -- Leading a trick and we need tricks: try playing highest card
+            -- We might prioritize a high off-suit over a Spade to draw out cards
+            -- Resort temporarily to prioritize high rank first
+            local tempValid = {}
+            for _, v in ipairs(validCards) do table.insert(tempValid, v) end
+            table.sort(tempValid, function(a,b) return rankValues[a.rank] < rankValues[b.rank] end)
+            chosenCard = tempValid[#tempValid]
+        else
+            -- Following: try to find the lowest card that can beat the bestCard
+            local winningCards = {}
+            for _, c in ipairs(validCards) do
+                local canWin = false
+                if c.suit == "S" and bestCard.suit ~= "S" then canWin = true
+                elseif c.suit == "S" and bestCard.suit == "S" and rankValues[c.rank] > rankValues[bestCard.rank] then canWin = true
+                elseif c.suit == trickLeadSuit and bestCard.suit == trickLeadSuit and rankValues[c.rank] > rankValues[bestCard.rank] then canWin = true
+                end
+                if canWin then table.insert(winningCards, c) end
+            end
+            
+            if #winningCards > 0 then
+                -- They are already sorted lowest to highest absolute value, so [1] is the lowest winning card
+                chosenCard = winningCards[1]
+            end
+        end
+    else
+        -- Don't want to win tricks
+        if bestCard then
+            -- We follow, play our lowest card
+            chosenCard = validCards[1]
+        else
+            -- Leading: play lowest card to offload
+            chosenCard = validCards[1]
+        end
+    end
     
     -- Find index in original hand to remove
     for i, c in ipairs(hand) do

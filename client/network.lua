@@ -101,6 +101,7 @@ function Network.update(dt)
             if data then
                 local ok, msg = pcall(json.decode, data)
                 if ok and msg then Network.handleSystemMessage(msg) end
+                if not Network.ws then break end
             elseif err == "timeout" then
                 break
             elseif err then
@@ -115,6 +116,7 @@ function Network.update(dt)
             if data then
                 local ok, msg = pcall(json.decode, data)
                 if ok and msg then Network.handleSystemMessage(msg) end
+                if not Network.ws then break end
             elseif err == "timeout" then
                 break
             elseif err then
@@ -129,6 +131,7 @@ function Network.update(dt)
             if data then
                 local ok, msg = pcall(json.decode, data)
                 if ok and msg then Network.handleSystemMessage(msg) end
+                if not Network.ws then break end
             elseif err == "timeout" then
                 break
             elseif err then

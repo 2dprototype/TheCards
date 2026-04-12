@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>modern cards · minimal sheet & back</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #1e1e1e;
+        }
+
+        .container {
+            max-width: 1360px;
+            width: 100%;
+            background: #ffffff;
+            border-radius: 28px;
+            padding: 2rem 2rem 2.2rem;
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.02), 0 4px 10px rgba(0, 0, 0, 0.01);
+            border: 1px solid #eaecf0;
+        }
+
+        h1 {
+            font-weight: 450;
+            font-size: 1.8rem;
+            letter-spacing: -0.02em;
+            color: #1a1e2b;
+            margin-bottom: 1.6rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h1 i {
+            font-size: 1.8rem;
+            opacity: 0.7;
+        }
+
+        h2 {
+            font-weight: 450;
+            font-size: 1.2rem;
+            color: #2c3a4b;
+            margin-bottom: 0.5rem;
+        }
+
+        .split-panels {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 2rem;
+            margin-bottom: 1.8rem;
+        }
+
+        .panel {
+            background: #fafbfc;
+            border-radius: 24px;
+            padding: 1.5rem 1.8rem;
+            border: 1px solid #edf0f3;
+        }
+
+        .controls-minimal {
+            display: flex;
+            flex-direction: column;
+            gap: 1.4rem;
+        }
+
+        .row-2col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem 1.2rem;
+        }
+
+        .control-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .control-item label {
+            font-size: 0.7rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            color: #6b7a8a;
+        }
+
+        .control-item input, .control-item select {
+            padding: 8px 10px;
+            border: 1px solid #dee4e9;
+            border-radius: 14px;
+            font-size: 0.9rem;
+            background: #ffffff;
+            transition: 0.15s;
+            font-family: inherit;
+        }
+
+        .control-item input:focus, .control-item select:focus {
+            outline: none;
+            border-color: #7f8fa0;
+            box-shadow: 0 0 0 3px rgba(127, 143, 160, 0.06);
+        }
+
+        .color-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .color-preview-small {
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            border: 1px solid #d0d9e0;
+            background: repeating-conic-gradient(#e0e0e0 0% 25%, #fff 0% 50%) 50% / 10px 10px;
+        }
+
+        .palette-group {
+            margin-top: 8px;
+        }
+
+        .palette-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .palette-btn {
+            border: 1px solid #d5dee5;
+            background: white;
+            border-radius: 40px;
+            padding: 5px 14px;
+            font-size: 0.75rem;
+            font-weight: 460;
+            color: #2e404f;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+
+        .palette-btn:hover {
+            background: #eef3f7;
+            border-color: #a6b7c5;
+        }
+
+        .pattern-grid {
+            display: grid;
+            grid-template-columns: repeat(3,1fr);
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .pattern-option {
+            border: 1px solid #d5dee5;
+            background: white;
+            border-radius: 20px;
+            padding: 6px 0;
+            font-size: 0.75rem;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.1s;
+        }
+
+        .pattern-option:hover {
+            background: #eef3f7;
+            border-color: #a6b7c5;
+        }
+
+        .canvas-preview {
+            background: #eef2f6;
+            padding: 1.2rem;
+            border-radius: 20px;
+            text-align: center;
+            border: 1px solid #e2e8ed;
+        }
+
+        canvas {
+            background: transparent;
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            border-radius: 12px;
+        }
+
+        .button-bar {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin: 1.5rem 0 0.8rem;
+        }
+
+        .btn {
+            padding: 10px 24px;
+            border-radius: 40px;
+            font-size: 0.85rem;
+            font-weight: 470;
+            cursor: pointer;
+            background: #ffffff;
+            border: 1px solid #d5dee5;
+            color: #1f2e3c;
+            transition: 0.12s;
+        }
+
+        .btn-primary {
+            background: #1e2e3f;
+            border: 1px solid #1e2e3f;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2a4055;
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid #cad3db;
+        }
+
+        .btn-outline:hover {
+            background: #f1f5f9;
+        }
+
+        .info-note {
+            font-size: 0.75rem;
+            color: #8899a8;
+            margin-top: 1rem;
+            border-top: 1px solid #ecf0f4;
+            padding-top: 1rem;
+        }
+
+        #backStatus {
+            font-size: 0.7rem;
+            margin-left: 8px;
+            color: #6b8a9e;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>
+        <span>🃏</span> modern card suite · minimal
+        <span style="font-size:0.9rem; font-weight:400; margin-left:12px; color:#6b849c;">front & back</span>
+    </h1>
+
+    <div class="split-panels">
+        <!-- LEFT PANEL: FRONT CARD CONTROLS -->
+        <div class="panel">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h2 style="margin:0;">↳ front · sprite sheet</h2>
+                <span style="font-size:0.75rem; color:#7d95a8;">13×4</span>
+            </div>
+            <div class="controls-minimal">
+                <div class="row-2col">
+                    <div class="control-item">
+                        <label>width</label>
+                        <input type="number" id="cardWidth" value="100" min="60" max="200" step="2">
+                    </div>
+                    <div class="control-item">
+                        <label>height</label>
+                        <input type="number" id="cardHeight" value="140" min="80" max="240" step="2">
+                    </div>
+                    <div class="control-item">
+                        <label>radius</label>
+                        <input type="number" id="cornerRadius" value="12" min="0" max="24" step="1">
+                    </div>
+                    <div class="control-item">
+                        <label>border w</label>
+                        <input type="number" id="borderWidth" value="1.2" min="0" max="6" step="0.5">
+                    </div>
+                </div>
+                <div class="row-2col">
+                    <div class="control-item">
+                        <label>card bg</label>
+                        <div class="color-row">
+                            <input type="color" id="cardBgColor" value="#f8fafc">
+                            <div class="color-preview-small" id="bgPreviewFront"></div>
+                        </div>
+                    </div>
+                    <div class="control-item">
+                        <label>border</label>
+                        <div class="color-row">
+                            <input type="color" id="borderColor" value="#b6c5d2">
+                        </div>
+                    </div>
+                </div>
+                <div class="control-item">
+                    <label>pattern</label>
+                    <select id="patternType">
+                        <option value="solid">solid</option>
+                        <option value="grid" selected>fine grid</option>
+                        <option value="dots">dots</option>
+                        <option value="lines">diagonal</option>
+                        <option value="circles">circles</option>
+                        <option value="diamonds">diamonds</option>
+                    </select>
+                </div>
+                <div class="row-2col" style="grid-template-columns:1fr 1fr 1fr;">
+                    <label style="display:flex; gap:6px; align-items:center;"><input type="checkbox" id="showShadow" checked> shadow</label>
+                    <label style="display:flex; gap:6px;"><input type="checkbox" id="showIndices" checked> indices</label>
+                    <label style="display:flex; gap:6px;"><input type="checkbox" id="showLargeSuit" checked> center suit</label>
+                </div>
+            </div>
+            <div style="margin-top:20px;">
+                <div class="canvas-preview">
+                    <canvas id="previewCanvas"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT PANEL: BACK DESIGN + PATTERNS + PALETTES -->
+        <div class="panel">
+            <h2 style="margin-top:0;">↳ card back · patterns & palettes</h2>
+            <div style="margin: 1rem 0 0.8rem;">
+                <label style="font-size:0.7rem; text-transform:uppercase; color:#6b7a8a;">back pattern</label>
+                <div class="pattern-grid" id="backPatternGrid">
+                    <!-- filled dynamically -->
+                </div>
+            </div>
+            <div class="row-2col">
+                <div class="control-item">
+                    <label>back color 1</label>
+                    <div class="color-row">
+                        <input type="color" id="backColor1" value="#1e2e3f">
+                        <div class="color-preview-small" id="backPrev1" style="background:#1e2e3f;"></div>
+                    </div>
+                </div>
+                <div class="control-item">
+                    <label>back color 2</label>
+                    <div class="color-row">
+                        <input type="color" id="backColor2" value="#d4e1ed">
+                        <div class="color-preview-small" id="backPrev2" style="background:#d4e1ed;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="palette-group">
+                <label style="font-size:0.7rem; text-transform:uppercase; color:#6b7a8a;">modern palettes</label>
+                <div class="palette-buttons" id="paletteContainer"></div>
+            </div>
+            <div style="margin-top:16px;">
+                <div style="display:flex; gap:12px; align-items:center;">
+                    <span style="font-size:0.8rem;">back preview</span>
+                    <span id="backStatus"></span>
+                </div>
+                <div class="canvas-preview" style="margin-top:8px;">
+                    <canvas id="backPreviewCanvas" width="200" height="280"></canvas>
+                </div>
+                <div style="margin-top:12px;">
+                    <button class="btn btn-outline" id="applyBackToSheetBtn" style="width:100%;">↻ apply back to full sheet (4×1)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="button-bar">
+        <button class="btn btn-primary" id="generateBtn">⟳ generate front</button>
+        <button class="btn btn-outline" id="saveFrontBtn">↓ save front PNG</button>
+        <button class="btn btn-outline" id="saveBackBtn">↓ save back PNG</button>
+        <button class="btn btn-outline" id="saveBackSheetBtn">↓ back sheet (4x)</button>
+    </div>
+    <div class="info-note">
+        suits use modern SVG · front: 13 ranks × 4 suits · back: endless patterns + palettes
+    </div>
+</div>
+
+<script>
+    (function(){
+        // ---------- CONST ----------
+        const ranks = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
+        const suits = ['C', 'D', 'H', 'S'];
+        
+        const frontCanvas = document.getElementById('previewCanvas');
+        const ctxFront = frontCanvas.getContext('2d');
+        const backCanvas = document.getElementById('backPreviewCanvas');
+        const ctxBack = backCanvas.getContext('2d');
+
+        // suit images
+        const suitImages = { C: new Image(), D: new Image(), H: new Image(), S: new Image() };
+        suitImages['C'].src = 'suit-club-fill.svg'
+        suitImages['D'].src = 'suit-diamond-fill.svg'
+        suitImages['H'].src = 'suit-heart-fill.svg'
+        suitImages['S'].src = 'suit-spade-fill.svg'
+
+        let imagesLoaded = 0;
+        function imgLoad() { imagesLoaded++; if(imagesLoaded===4) { generateFrontSheet(); updateBackPreview(); } }
+        for(let s in suitImages) { suitImages[s].onload = imgLoad; suitImages[s].onerror = imgLoad; }
+
+        // back patterns list
+        const backPatterns = [
+            'grid', 'diagonal', 'dots', 'circles', 'diamonds', 
+            'concentric', 'herringbone', 'crosshatch', 'zigzag', 'waves',
+            'triangles', 'hexagons', 'radial', 'scales', 'stripes'
+        ];
+        let currentBackPattern = 'grid';
+
+        // UI elements
+        const bgFrontPreview = document.getElementById('bgPreviewFront');
+        const backPrev1 = document.getElementById('backPrev1');
+        const backPrev2 = document.getElementById('backPrev2');
+        
+        document.getElementById('cardBgColor').addEventListener('input', (e)=> bgFrontPreview.style.background = e.target.value);
+        document.getElementById('backColor1').addEventListener('input', (e)=> backPrev1.style.background = e.target.value);
+        document.getElementById('backColor2').addEventListener('input', (e)=> backPrev2.style.background = e.target.value);
+        
+        // pattern grid
+        const gridDiv = document.getElementById('backPatternGrid');
+        backPatterns.forEach(p => {
+            const btn = document.createElement('div');
+            btn.className = 'pattern-option';
+            btn.textContent = p;
+            btn.addEventListener('click', ()=> { currentBackPattern = p; updateBackPreview(); });
+            gridDiv.appendChild(btn);
+        });
+
+        // modern palettes
+        const palettes = [
+            { name:'slate', c1:'#1e2e3f', c2:'#dce5ec' },
+            { name:'ocean', c1:'#0b3b4a', c2:'#b4d6e7' },
+            { name:'terracotta', c1:'#5e3a34', c2:'#eed7ce' },
+            { name:'olive', c1:'#2f3e2e', c2:'#d2dfc8' },
+            { name:'plum', c1:'#3c2a3f', c2:'#e1d0e4' },
+            { name:'sand', c1:'#5e5340', c2:'#f2e8d5' },
+            { name:'ink', c1:'#11181f', c2:'#cbd5e1' },
+            { name:'mint', c1:'#1f4a3d', c2:'#cceae3' }
+        ];
+        const paletteDiv = document.getElementById('paletteContainer');
+        palettes.forEach(pal => {
+            const b = document.createElement('button');
+            b.className = 'palette-btn';
+            b.textContent = pal.name;
+            b.addEventListener('click', ()=>{
+                document.getElementById('backColor1').value = pal.c1;
+                document.getElementById('backColor2').value = pal.c2;
+                backPrev1.style.background = pal.c1;
+                backPrev2.style.background = pal.c2;
+                updateBackPreview();
+            });
+            paletteDiv.appendChild(b);
+        });
+        
+        // ---------- Pattern drawing ----------
+        function drawPattern(ctx, w, h, patternType, baseColor) {
+            ctx.strokeStyle = baseColor;
+            ctx.fillStyle = baseColor;
+            ctx.lineWidth = 0.8;
+            ctx.globalAlpha = 0.1
+            
+            const step = Math.max(8, Math.floor(w/18));
+            
+            switch(patternType) {
+                case 'grid':
+                    for(let i=0; i<w; i+= step){
+                        ctx.beginPath();
+                        ctx.moveTo(i,0); ctx.lineTo(i,h);
+                        ctx.stroke();
+                    }
+                    for(let i=0; i<h; i+= step){
+                        ctx.beginPath();
+                        ctx.moveTo(0,i); ctx.lineTo(w,i);
+                        ctx.stroke();
+                    }
+                    break;
+                case 'dots':
+                    for(let x=step/2; x<w; x+= step*1.2){
+                        for(let y=step/2; y<h; y+= step*1.2){
+                            ctx.beginPath();
+                            ctx.arc(x, y, step*0.2, 0, 2*Math.PI);
+                            ctx.fill();
+                        }
+                    }
+                    break;
+                case 'lines':
+                    for(let i = -h; i < w+h; i+= step*1.5){
+                        ctx.beginPath();
+                        ctx.moveTo(i, 0);
+                        ctx.lineTo(i+h, h);
+                        ctx.stroke();
+                    }
+                    break;
+                case 'circles':
+                    for(let x=step; x<w; x+= step*1.8){
+                        for(let y=step; y<h; y+= step*1.8){
+                            ctx.beginPath();
+                            ctx.arc(x, y, step*0.45, 0, 2*Math.PI);
+                            ctx.stroke();
+                        }
+                    }
+                    break;
+                case 'diamonds':
+                    for(let x=step/2; x<w; x+= step*1.8){
+                        for(let y=step/2; y<h; y+= step*1.8){
+                            ctx.beginPath();
+                            ctx.moveTo(x, y-step*0.5);
+                            ctx.lineTo(x+step*0.5, y);
+                            ctx.lineTo(x, y+step*0.5);
+                            ctx.lineTo(x-step*0.5, y);
+                            ctx.closePath();
+                            ctx.stroke();
+                        }
+                    }
+                    break;
+            }
+            ctx.globalAlpha = 1.0;
+        }
+
+        // roundRect
+        CanvasRenderingContext2D.prototype.roundRect = function(x,y,w,h,r){
+            if(w<2*r) r=w/2; if(h<2*r) r=h/2;
+            this.moveTo(x+r,y); this.lineTo(x+w-r,y); this.quadraticCurveTo(x+w,y,x+w,y+r);
+            this.lineTo(x+w,y+h-r); this.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+            this.lineTo(x+r,y+h); this.quadraticCurveTo(x,y+h,x,y+h-r);
+            this.lineTo(x,y+r); this.quadraticCurveTo(x,y,x+r,y);
+            return this;
+        };
+
+        // pattern drawing helpers
+        function drawBackPattern(ctx, w, h, pattern, c1, c2) {
+            ctx.fillStyle = c1;
+            ctx.fillRect(0,0,w,h);
+            ctx.strokeStyle = c2;
+            ctx.fillStyle = c2;
+            ctx.lineWidth = 1.2;
+            const step = Math.max(10, w/12);
+            
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0,0,w,h);
+            ctx.clip();
+
+            if(pattern==='grid'){
+                for(let i=0;i<w;i+=step){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,h);ctx.stroke();}
+                for(let i=0;i<h;i+=step){ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(w,i);ctx.stroke();}
+            } else if(pattern==='diagonal'){
+                for(let i=-h;i<w+h;i+=step*1.4){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i+h,h);ctx.stroke();}
+            } else if(pattern==='dots'){
+                for(let x=step/2;x<w;x+=step*1.3) for(let y=step/2;y<h;y+=step*1.3){ctx.beginPath();ctx.arc(x,y,step*0.2,0,2*Math.PI);ctx.fill();}
+            } else if(pattern==='circles'){
+                for(let x=step;x<w;x+=step*1.8) for(let y=step;y<h;y+=step*1.8){ctx.beginPath();ctx.arc(x,y,step*0.45,0,2*Math.PI);ctx.stroke();}
+            } else if(pattern==='diamonds'){
+                for(let x=step/2;x<w;x+=step*1.8) for(let y=step/2;y<h;y+=step*1.8){
+                    ctx.beginPath(); ctx.moveTo(x,y-step*0.5); ctx.lineTo(x+step*0.5,y); ctx.lineTo(x,y+step*0.5); ctx.lineTo(x-step*0.5,y); ctx.closePath(); ctx.stroke();
+                }
+            } else if(pattern==='concentric'){
+                for(let r=step; r<Math.max(w,h); r+=step*1.2){ ctx.beginPath(); ctx.arc(w/2,h/2,r,0,2*Math.PI); ctx.stroke(); }
+            } else if(pattern==='herringbone' || pattern==='crosshatch'){
+                for(let i=-h; i<w+h; i+=step){ ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i+step*2, h); ctx.stroke(); }
+                for(let i=-h; i<w+h; i+=step){ ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i-step*2, h); ctx.stroke(); }
+            } else if(pattern==='zigzag'){
+                ctx.beginPath(); for(let i=0;i<w;i+=step*2){ ctx.moveTo(i,0); ctx.lineTo(i+step, h); ctx.lineTo(i+step*2,0); } ctx.stroke();
+            } else if(pattern==='waves'){
+                ctx.beginPath(); for(let y=0;y<h;y+=step*1.8){ for(let x=0;x<w;x+=4){ ctx.lineTo(x+step/2, y+Math.sin(x/20)*10); } } ctx.stroke();
+            } else if(pattern==='triangles'){
+                for(let x=0;x<w+step;x+=step*1.8) for(let y=0;y<h+step;y+=step*1.6){
+                    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+step*0.8,y); ctx.lineTo(x+step*0.4,y+step*0.7); ctx.closePath(); ctx.stroke();
+                }
+            } else if(pattern==='hexagons'){
+                const a = step*0.6; for(let x=0;x<w+step;x+=step*1.5) for(let y=0;y<h+step;y+=step*1.2){
+                    ctx.beginPath(); for(let i=0;i<6;i++){ let ang = i*Math.PI/3; ctx.lineTo(x+a*Math.cos(ang), y+a*Math.sin(ang)); } ctx.closePath(); ctx.stroke();
+                }
+            } else if(pattern==='radial'){
+                for(let i=0;i<12;i++){ let ang = i*Math.PI/6; ctx.beginPath(); ctx.moveTo(w/2,h/2); ctx.lineTo(w/2+Math.cos(ang)*w, h/2+Math.sin(ang)*h); ctx.stroke(); }
+            } else if(pattern==='scales'){
+                for(let x=0;x<w+step;x+=step) for(let y=0;y<h+step;y+=step*1.5){ ctx.beginPath(); ctx.arc(x,y,step*0.6,0,Math.PI,true); ctx.stroke(); }
+            } else if(pattern==='stripes'){
+                for(let i=0;i<w+h;i+=step*2){ ctx.fillRect(i,0,step,h); }
+            } else {
+                // default
+            }
+            ctx.restore();
+        }
+
+        function updateBackPreview() {
+            const w = 200, h = 280, r = 12;
+            const c1 = document.getElementById('backColor1').value;
+            const c2 = document.getElementById('backColor2').value;
+            ctxBack.clearRect(0,0,w,h);
+            ctxBack.save();
+            ctxBack.beginPath(); ctxBack.roundRect(0,0,w,h,r); ctxBack.clip();
+            drawBackPattern(ctxBack, w, h, currentBackPattern, c1, c2);
+            ctxBack.restore();
+            ctxBack.strokeStyle = '#b0c0cd'; ctxBack.lineWidth=1.2;
+            ctxBack.beginPath(); ctxBack.roundRect(0.6,0.6,w-1.2,h-1.2, r-1); ctxBack.stroke();
+            document.getElementById('backStatus').textContent = `pattern: ${currentBackPattern}`;
+        }
+
+        function drawFrontCard(ctx, w, h, rank, suit) {
+            const borderColor = document.getElementById('borderColor').value;
+            const borderWidth = parseFloat(document.getElementById('borderWidth').value)
+            const cornerRadius = parseFloat(document.getElementById('cornerRadius').value)
+            const patternType = document.getElementById('patternType').value;
+            const bgColor = document.getElementById('cardBgColor').value;
+            
+            // suit color for pattern and styling
+            const suitTint = (suit === 'H' || suit === 'D') ? '#c23b3b' : '#1e272b';
+
+            ctx.save();
+            
+            // Create clipping path for rounded corners
+            ctx.beginPath();
+            ctx.roundRect(0, 0, w, h, cornerRadius);
+            ctx.clip();
+            
+            if (document.getElementById('showShadow').checked) {
+                ctx.shadowColor = 'rgba(0,0,0,0.06)';
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+            }
+            
+            ctx.fillStyle = bgColor; ctx.fillRect(0,0,w,h);
+            
+            // Draw background and pattern within clipped area
+            if (typeof drawPattern === 'function') {
+                drawPattern(ctx, w, h, patternType, suitTint);
+            }
+            
+            ctx.shadowColor = 'transparent';
+            
+            // Draw border on top
+            ctx.beginPath();
+            ctx.roundRect(borderWidth/2, borderWidth/2, w - borderWidth, h - borderWidth, Math.max(0, cornerRadius - borderWidth/2));
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = borderWidth;
+            ctx.stroke();
+            
+            const showIndices = document.getElementById('showIndices').checked;
+            const showLargeSuit = document.getElementById('showLargeSuit').checked;
+            const suitImg = suitImages[suit]; 
+            const fontSize = 17;
+            
+            // Helper to draw suit image
+            function drawSuitImage(x, y, size, inverted = false) {
+                if (!suitImg || !suitImg.complete) return;
+                try {
+                    ctx.save();
+                    ctx.translate(x, y);
+                    if (inverted) ctx.rotate(Math.PI);
+                    ctx.drawImage(suitImg, -size / 2, -size / 2, size, size);
+                    ctx.restore();
+                } catch(e) {}
+            }
+
+            if (showIndices) {
+                ctx.font = `500 ${fontSize}px "Inter", "Segoe UI", sans-serif`;
+                ctx.fillStyle = suitTint;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                
+                const pad = w * 0.08;
+                const topY = h * 0.05;
+                ctx.fillText(rank, pad, topY);
+                const iconSize = fontSize * 0.8;
+                
+
+                
+                // Bottom right inverted index
+                ctx.save();
+                ctx.translate(w - pad, h - topY);
+                ctx.rotate(Math.PI);
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText(rank, 0, 0);
+                const bw = ctx.measureText(rank).width;
+                ctx.restore();
+            }
+            
+            if (showLargeSuit) {
+                const pips = {
+                    '2': [[0.5, 0.2], [0.5, 0.8, true]],
+                    '3': [[0.5, 0.2], [0.5, 0.5], [0.5, 0.8, true]],
+                    '4': [[0.3, 0.2], [0.7, 0.2], [0.3, 0.8, true], [0.7, 0.8, true]],
+                    '5': [[0.3, 0.2], [0.7, 0.2], [0.5, 0.5], [0.3, 0.8, true], [0.7, 0.8, true]],
+                    '6': [[0.3, 0.2], [0.7, 0.2], [0.3, 0.5], [0.7, 0.5], [0.3, 0.8, true], [0.7, 0.8, true]],
+                    '7': [[0.3, 0.2], [0.7, 0.2], [0.3, 0.5], [0.7, 0.5], [0.3, 0.8, true], [0.7, 0.8, true], [0.5, 0.35]],
+                    '8': [[0.3, 0.2], [0.7, 0.2], [0.3, 0.5], [0.7, 0.5], [0.3, 0.8, true], [0.7, 0.8, true], [0.5, 0.35], [0.5, 0.65, true]],
+                    '9': [
+                        [0.3, 0.2], [0.7, 0.2], [0.3, 0.41], [0.7, 0.41],
+                        [0.5, 0.5],
+                        [0.3, 0.59, true], [0.7, 0.59, true], [0.3, 0.8, true], [0.7, 0.8, true]
+                    ],
+                    '10': [
+                        [0.3, 0.2], [0.7, 0.2], [0.3, 0.41], [0.7, 0.41],
+                        [0.5, 0.31], [0.5, 0.69, true],
+                        [0.3, 0.59, true], [0.7, 0.59, true], [0.3, 0.8, true], [0.7, 0.8, true]
+                    ]
+                };
+
+                if (pips[rank]) {
+                    // Draw real deck layout for numbers 2-10
+                    const pipSize = w * 0.20;
+                    const layout = pips[rank];
+                    
+                    layout.forEach(pos => {
+                        const [xPct, yPct, invert] = pos;
+                        drawSuitImage(w * xPct, h * yPct, pipSize, invert);
+                    });
+
+                } else if (['J', 'Q', 'K'].includes(rank)) {
+                    // Unique Face Card (Court Card) Design
+                    const innerW = w * 0.65;
+                    const innerH = h * 0.60;
+                    const innerX = (w - innerW) / 2;
+                    const innerY = (h - innerH) / 2;
+
+                    // Draw a subtle tinted background for the court area
+                    ctx.fillStyle = suitTint + '15'; // Hex color with ~8% opacity
+                    ctx.fillRect(innerX, innerY, innerW, innerH);
+
+                    
+                    const courtSuitSize = h * 0.14;
+                    
+                    ctx.font = `bold ${h * 0.16}px "Inter", "Segoe UI", sans-serif`;
+                    ctx.fillStyle = suitTint;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    // Draw top half
+                    ctx.fillText(rank, w/2 - courtSuitSize * 0.8, h/2 - innerH/4);
+                    drawSuitImage(w/2 + courtSuitSize * 0.8, h/2 - innerH/4, courtSuitSize);
+
+                    // Draw bottom half (mirrored text and inverted suit)
+                    ctx.save();
+                    ctx.translate(w/2, h/2);
+                    ctx.rotate(Math.PI);
+                    ctx.fillText(rank, -courtSuitSize * 0.8, -innerH/4);
+                    ctx.restore();
+                    drawSuitImage(w/2 - courtSuitSize * 0.8, h/2 + innerH/4, courtSuitSize, true);
+
+                } else {
+                    // Ace gets the single massive center suit
+                    let largeSize = h * 0.35;
+                    if (suit != 'S') largeSize = h * 0.2
+                    drawSuitImage(w / 2, h / 2, largeSize);
+                }
+            }
+            
+            ctx.restore();
+        }
+
+        function generateFrontSheet(){
+            const w = parseFloat(document.getElementById('cardWidth').value)||100;
+            const h = parseFloat(document.getElementById('cardHeight').value)||140;
+            frontCanvas.width = w*13; frontCanvas.height = h*4;
+            ctxFront.clearRect(0,0,frontCanvas.width,frontCanvas.height);
+            suits.forEach((suit,si)=> ranks.forEach((rank,ri)=>{
+                ctxFront.save(); ctxFront.translate(ri*w, si*h);
+                drawFrontCard(ctxFront, w, h, rank, suit);
+                ctxFront.restore();
+            }));
+        }
+
+        function generateBackSheet(){
+            const w = parseFloat(document.getElementById('cardWidth').value)||100;
+            const h = parseFloat(document.getElementById('cardHeight').value)||140;
+            const canvas = document.createElement('canvas'); canvas.width = w*1; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            const c1 = document.getElementById('backColor1').value, c2 = document.getElementById('backColor2').value;
+            const rad = parseFloat(document.getElementById('cornerRadius').value);
+            for(let i=0;i<1;i++){
+                ctx.save(); ctx.translate(i*w,0);
+                ctx.beginPath(); ctx.roundRect(0,0,w,h,rad); ctx.clip();
+                drawBackPattern(ctx, w, h, currentBackPattern, c1, c2);
+                ctx.restore();
+                ctx.strokeStyle='#b0c0cd'; ctx.lineWidth=1.2;
+                ctx.beginPath(); ctx.roundRect(i*w+0.6,0.6,w-1.2,h-1.2,rad-1); ctx.stroke();
+            }
+            return canvas;
+        }
+
+        // event binding
+        document.querySelectorAll('#cardWidth, #cardHeight, #cornerRadius, #borderWidth, #borderColor, #patternType, #showShadow, #showIndices, #showLargeSuit').forEach(el=> el.addEventListener('input', generateFrontSheet));
+        document.getElementById('cardBgColor').addEventListener('input', ()=>{ bgFrontPreview.style.background = document.getElementById('cardBgColor').value; generateFrontSheet(); });
+        document.getElementById('generateBtn').addEventListener('click', generateFrontSheet);
+        document.getElementById('saveFrontBtn').addEventListener('click', ()=>{
+            const link = document.createElement('a'); link.download = 'modern_cards_front.png'; link.href = frontCanvas.toDataURL(); link.click();
+        });
+        document.getElementById('saveBackBtn').addEventListener('click', ()=>{
+            updateBackPreview();
+            const link = document.createElement('a'); link.download = 'card_back.png'; link.href = backCanvas.toDataURL(); link.click();
+        });
+        document.getElementById('saveBackSheetBtn').addEventListener('click', ()=>{
+            const sheet = generateBackSheet();
+            const link = document.createElement('a'); link.download = 'card_backs_4x.png'; link.href = sheet.toDataURL(); link.click();
+        });
+        document.getElementById('applyBackToSheetBtn').addEventListener('click', ()=>{
+            const w = parseFloat(document.getElementById('cardWidth').value)||100;
+            const h = parseFloat(document.getElementById('cardHeight').value)||140;
+            frontCanvas.width = w*4; frontCanvas.height = h;
+            const c1=document.getElementById('backColor1').value, c2=document.getElementById('backColor2').value, rad=parseFloat(document.getElementById('cornerRadius').value);
+            ctxFront.clearRect(0,0,frontCanvas.width,frontCanvas.height);
+            for(let i=0;i<4;i++){
+                ctxFront.save(); ctxFront.translate(i*w,0);
+                ctxFront.beginPath(); ctxFront.roundRect(0,0,w,h,rad); ctxFront.clip();
+                drawBackPattern(ctxFront, w, h, currentBackPattern, c1, c2);
+                ctxFront.restore();
+                ctxFront.strokeStyle='#b0c0cd'; ctxFront.lineWidth=1.2;
+                ctxFront.beginPath(); ctxFront.roundRect(i*w+0.6,0.6,w-1.2,h-1.2,rad-1); ctxFront.stroke();
+            }
+        });
+
+        // back listeners
+        document.getElementById('backColor1').addEventListener('input', updateBackPreview);
+        document.getElementById('backColor2').addEventListener('input', updateBackPreview);
+        updateBackPreview();
+        bgFrontPreview.style.background = '#f8fafc';
+        if(imagesLoaded===4) generateFrontSheet();
+    })();
+</script>
+</body>
+</html>

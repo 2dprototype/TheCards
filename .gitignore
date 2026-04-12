@@ -1,4 +1,6 @@
 server/node_modules
 server/.env
 proxy_go/proxy.exe
-proxy_go/proxy.ini
+proxy_go/.env
+love/
+build/

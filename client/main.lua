@@ -13,7 +13,7 @@ _G.SCREEN_HEIGHT = 480
 -- "JOIN": Join input code
 -- "SETTINGS": Network settings
 -- "GAME": In game
-
+ local backgroundImage = nil
 local appState = "MENU"
 local errorMessage = nil
 _G.inPauseMenu = false
@@ -41,6 +41,12 @@ function love.load()
     love.window.setTitle("Devil Bridge")
     love.keyboard.setTextInput(true)
     love.keyboard.setKeyRepeat(true)
+    
+   
+
+    backgroundImage = love.graphics.newImage("assets/g.jpg")
+    backgroundImage:setWrap("repeat", "repeat")
+    backgroundImage:setFilter("linear", "linear")
     
     love.graphics.setDefaultFilter("linear", "linear")
     love.keyboard.setKeyRepeat(true)
@@ -76,7 +82,7 @@ function setupMenuUI()
         _G.globalUsername = Config.get("username")
     end
     if _G.globalUsername then UI.setText("input_name", _G.globalUsername) end
-    UI.addButton("btn_host", "Host Online Game", cx - 100, cy - 100, 200, 50, function()
+    UI.addButton("btn_host", "Host Online", cx - 100, cy - 100, 200, 50, function()
         local name = UI.getText("input_name")
         if not name or name == "" then name = "Host" end
         _G.globalUsername = name
@@ -85,7 +91,7 @@ function setupMenuUI()
         appState = "LOBBY"
         setupLobbyUI()
     end)
-    UI.addButton("btn_join", "Join Online Game", cx - 100, cy - 20, 200, 50, function()
+    UI.addButton("btn_join", "Join Online", cx - 100, cy - 20, 200, 50, function()
         local name = UI.getText("input_name")
         if not name or name == "" then name = "Player" .. math.random(100, 999) end
         _G.globalUsername = name
@@ -93,11 +99,13 @@ function setupMenuUI()
         appState = "JOIN"
         setupJoinUI()
     end)
-    UI.addButton("btn_offline", "Play Offline (Bots)", cx - 100, cy + 60, 200, 50, function()
+    UI.addButton("btn_offline", "Play Offline", cx - 100, cy + 60, 200, 50, function()
         local name = UI.getText("input_name")
         if not name or name == "" then name = "You" end
         _G.globalUsername = name
         Config.set("username", name)
+        GameLogic.totalRounds = _G.matchRounds or 5
+        GameLogic.maxTurnTime = _G.matchTurnTime or 15
         GameLogic.startOfflineGame()
         appState = "GAME"
         setupGameUI()
@@ -135,15 +143,51 @@ end
 function setupLobbyUI()
     UI.clear()
     local cx, cy = _G.getW() / 2, _G.getH() / 2
-    UI.addLabel("lbl_lobby", "Setting up Lobby...", cx - 100, cy - 150)
-    UI.addButton("btn_start", "Start Game", cx - 100, cy + 100, 200, 50, function()
+    UI.addLabel("lbl_lobby", "Setting up Lobby...", cx - 100, cy - 180)
+    
+    if not _G.matchRounds then _G.matchRounds = 5 end
+    if not _G.matchTurnTime then _G.matchTurnTime = 15 end
+
+    -- Rounds Option
+    UI.addLabel("lbl_rounds", "Rounds: " .. _G.matchRounds, cx - 60, cy - 100)
+    UI.addButton("btn_rounds_minus", "-", cx - 120, cy - 110, 40, 40, function()
+        if _G.matchRounds > 1 then 
+            _G.matchRounds = _G.matchRounds - 1 
+            UI.setText("lbl_rounds", "Rounds: " .. _G.matchRounds)
+        end
+    end)
+    UI.addButton("btn_rounds_plus", "+", cx + 80, cy - 110, 40, 40, function()
+        if _G.matchRounds < 20 then 
+            _G.matchRounds = _G.matchRounds + 1 
+            UI.setText("lbl_rounds", "Rounds: " .. _G.matchRounds)
+        end
+    end)
+
+    -- Turn Time Option
+    UI.addLabel("lbl_time", "Timer: " .. _G.matchTurnTime .. "s", cx - 60, cy - 40)
+    UI.addButton("btn_time_minus", "-", cx - 120, cy - 50, 40, 40, function()
+        if _G.matchTurnTime > 5 then 
+            _G.matchTurnTime = _G.matchTurnTime - 5 
+            UI.setText("lbl_time", "Timer: " .. _G.matchTurnTime .. "s")
+        end
+    end)
+    UI.addButton("btn_time_plus", "+", cx + 80, cy - 50, 40, 40, function()
+        if _G.matchTurnTime < 60 then 
+            _G.matchTurnTime = _G.matchTurnTime + 5 
+            UI.setText("lbl_time", "Timer: " .. _G.matchTurnTime .. "s")
+        end
+    end)
+
+    UI.addButton("btn_start", "Start Game", cx - 100, cy + 50, 200, 50, function()
         if Network.roomCode then
+            GameLogic.totalRounds = _G.matchRounds
+            GameLogic.maxTurnTime = _G.matchTurnTime
             GameLogic.startOnlineHostGame()
             appState = "GAME"
             setupGameUI()
         end
     end)
-    UI.addButton("btn_back", "Back", cx - 100, cy + 180, 200, 50, function()
+    UI.addButton("btn_back", "Back", cx - 100, cy + 130, 200, 50, function()
         Network.disconnect()
         appState = "MENU"
         setupMenuUI()
@@ -243,10 +287,45 @@ function love.draw()
     -- Scissor out the overflowing bounds dynamically
     love.graphics.setScissor(ox, oy, _G.getW() * scale, _G.getH() * scale)
     
-    -- Background
+    -- -- Background
+    -- if appState == "GAME" then
+        -- -- Felt green background
+        -- love.graphics.clear(0.08, 0.35, 0.20, 1.0)
+        -- -- love.graphics.clear(0.109804, 0.109804, 0.109804, 1)
+        -- GameLogic.draw()
+        
+        -- if _G.inPauseMenu or GameLogic.phase == "MATCH_OVER" then
+            -- love.graphics.setColor(0, 0, 0, 0.7)
+            -- love.graphics.rectangle("fill", 0, 0, _G.getW(), _G.getH())
+        -- end
+    -- else
+        -- love.graphics.clear(0.05, 0.08, 0.12, 1.0)
+    -- end
+    
+    -- In love.load() or initialization section
+
+    -- In your draw section
     if appState == "GAME" then
-        -- Felt green background
-        love.graphics.clear(0.08, 0.35, 0.20, 1.0)
+        -- love.graphics.clear(0.08, 0.35, 0.20, 1.0)
+        love.graphics.clear(0.05, 0.30, 0.15, 1.0)
+        -- Draw background image with blend mode
+        if backgroundImage then
+            -- Store current color
+            local r, g, b, a = love.graphics.getColor()
+            -- Method 1: Draw with alpha blending
+            love.graphics.setColor(1, 1, 1, 0.18) -- 50% opacity
+            love.graphics.draw(backgroundImage, 0, 0, 0, _G.getW()/backgroundImage:getWidth(), _G.getH()/backgroundImage:getHeight())
+            
+            -- Method 2 (alternative): Use blend modes for different effects
+            -- love.graphics.setBlendMode("multiply", "premultiplied")
+            -- love.graphics.setColor(1, 1, 1, 1)
+            -- love.graphics.draw(backgroundImage, 0, 0, 0, _G.getW()/backgroundImage:getWidth(), _G.getH()/backgroundImage:getHeight())
+            -- love.graphics.setBlendMode("alpha")
+            
+            -- Restore color
+            love.graphics.setColor(r, g, b, a)
+        end
+        
         GameLogic.draw()
         
         if _G.inPauseMenu or GameLogic.phase == "MATCH_OVER" then
@@ -254,8 +333,9 @@ function love.draw()
             love.graphics.rectangle("fill", 0, 0, _G.getW(), _G.getH())
         end
     else
-        love.graphics.clear(0.05, 0.08, 0.12, 1.0)
-    end
+
+    love.graphics.clear(0.05, 0.08, 0.12, 1.0)
+end
     
     UI.draw()
     
