@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -77,12 +78,23 @@ func createLocalID() string {
 
 func main() {
 	loadDotEnv()
+	
+	flagPort := flag.String("port", "", "Local proxy port")
+	flagRemoteURL := flag.String("remote-url", "", "Remote server URL")
+	flag.Parse()
 
 	localPort = os.Getenv("LOCAL_PORT")
+	if *flagPort != "" {
+		localPort = *flagPort
+	}
 	if localPort == "" {
 		localPort = "8080"
 	}
+	
 	remoteURL = os.Getenv("REMOTE_URL")
+	if *flagRemoteURL != "" {
+		remoteURL = *flagRemoteURL
+	}
 
 	if remoteURL == "" {
 		fmt.Fprintln(os.Stderr, "Error: REMOTE_URL environment variable is required")

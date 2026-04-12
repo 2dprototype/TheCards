@@ -188,8 +188,6 @@ function UI.drawKeyboard()
     
     love.graphics.setColor(0.1, 0.1, 0.15, 0.95)
     love.graphics.rectangle("fill", kx, ky, kw, kh)
-    love.graphics.setColor(1, 1, 1, 0.5)
-    love.graphics.line(kx, ky, kw, ky)
     
     UI.osk.keys = {}
     
@@ -216,11 +214,9 @@ function UI.drawKeyboard()
             
             table.insert(UI.osk.keys, { x = currentX, y = currentY, w = bw, h = bh, key = k, dText = dText })
             
-            love.graphics.setColor(0.25, 0.25, 0.35, 1)
+            love.graphics.setColor(0.25, 0.25, 0.35, 0.5)
             love.graphics.rectangle("fill", currentX, currentY, bw, bh, 6, 6)
             love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.rectangle("line", currentX, currentY, bw, bh, 6, 6)
-            
             local tw = UI.font:getWidth(dText)
             local th = UI.font:getHeight()
             love.graphics.print(dText, currentX + bw/2 - tw/2, currentY + bh/2 - th/2)

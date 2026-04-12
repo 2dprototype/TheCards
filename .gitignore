@@ -4,3 +4,6 @@ proxy_go/proxy.exe
 proxy_go/.env
 love/
 build/
+launcher/launcher.exe
+launcher/.env
+.env

@@ -44,11 +44,11 @@ echo.
 
 echo [3/4] Building fused executable...
 :: Create fused executable by appending .love to love.exe
-copy /b "!LOVE_EXE!" + "build\DevilBridge.love" "build\DevilBridge.exe" /Y >nul
-if exist build\DevilBridge.exe (
-    echo Successfully created DevilBridge.exe
+copy /b "!LOVE_EXE!" + "build\DevilBridge.love" "build\bridge.exe" /Y >nul
+if exist build\bridge.exe (
+    echo Successfully created bridge.exe
 ) else (
-    echo [ERROR] Failed to create DevilBridge.exe!
+    echo [ERROR] Failed to create bridge.exe!
     pause
     exit /b 1
 )
@@ -83,12 +83,20 @@ if exist "proxy_go\proxy.exe" (
     echo [INFO] proxy_go\proxy.exe not found - skipping proxy server.
 )
 
+echo [Optional] Copying Game Launcher...
+if exist "launcher\launcher.exe" (
+    copy /Y "launcher\launcher.exe" "build\" >nul
+    echo launcher.exe and environment variables copied successfully.
+) else (
+    echo [INFO] launcher\launcher.exe not found - skipping proxy server.
+)
+
 echo.
 echo ==============================================
 echo Build complete! Distribution files in \build folder:
 echo ==============================================
 echo Required files for distribution:
-echo   - DevilBridge.exe
+echo   - bridge.exe
 echo   - love.dll
 echo   - lua51.dll
 echo   - SDL2.dll

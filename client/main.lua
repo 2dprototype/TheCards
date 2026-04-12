@@ -36,7 +36,7 @@ love.mouse.getPosition = function()
     return (x - ox) / scale, (y - oy) / scale
 end
 
-function love.load()
+function love.load(args)
     love.window.setMode(_G.SCREEN_WIDTH, _G.SCREEN_HEIGHT, {resizable=true, vsync=true, minwidth=700, minheight=400})
     love.window.setTitle("Devil Bridge")
     love.keyboard.setTextInput(true)
@@ -55,6 +55,15 @@ function love.load()
     Network.load()
     GameLogic.load()
     Config.load()
+    
+    -- Parse CLI arguments
+    if args then
+        for i, v in ipairs(args) do
+            if v == "--server-uri" and args[i+1] then
+                Config.set("server_uri", args[i+1])
+            end
+        end
+    end
     
     -- Setup basic UI for MENU
     setupMenuUI()
