@@ -46,6 +46,14 @@ GameLogic.players = {} -- array of 4 players
 GameLogic.myPlayerIdx = 1
 GameLogic.currentPlayer = 1
 
+GameLogic.deckPacks = {
+    {name="Olive Stripes",    back="card_back_2.png",   front="cards_diagonal.png"},
+    {name="Ink Diagonal",     back="card_back.png",     front="cards_diagonal.png"},
+    {name="ZigZag Plum",      back="card_back_4.png",   front="cards_diagonal.png"},
+    {name="Olive Solo",       back="card_back_3.png",   front="cards_solo.png"}
+}
+GameLogic.currentDeckPackIdx = 1
+
 GameLogic.totalRounds = 5
 GameLogic.maxTurnTime = 15
 
@@ -57,7 +65,7 @@ GameLogic.turnTimer = 0
 
 function GameLogic.load()
     math.randomseed(os.time())
-    GameLogic.loadCardSprites()
+    GameLogic.loadCardSprites(GameLogic.currentDeckPackIdx)
 end
 
 function GameLogic.startOfflineGame()
@@ -461,6 +469,7 @@ function GameLogic.getStateFor(clientId)
         end
         table.insert(state.players, pSafe)
     end
+    state.deckPackIdx = GameLogic.currentDeckPackIdx
     return state
 end
 
@@ -521,6 +530,11 @@ function GameLogic.applyStateUpdate(state)
     GameLogic.roundNum = state.roundNum
     GameLogic.totalRounds = state.totalRounds or 5
     GameLogic.maxTurnTime = state.maxTurnTime or 15
+    
+    if state.deckPackIdx and state.deckPackIdx ~= GameLogic.currentDeckPackIdx then
+        GameLogic.currentDeckPackIdx = state.deckPackIdx
+        GameLogic.loadCardSprites(GameLogic.currentDeckPackIdx)
+    end
     
     GameLogic.players = state.players
     for i=1, 4 do
@@ -808,17 +822,27 @@ local cardSheet
 local cardQuads = {}
 local cardBackSheet
 
-function GameLogic.loadCardSprites()
-    cardSheet = love.graphics.newImage("assets/cards_13x4.png")
-    local success, img = pcall(love.graphics.newImage, "assets/card_back_2.png")
-    if success then cardBackSheet = img end
+function GameLogic.loadCardSprites(packIdx)
+    packIdx = packIdx or 1
+    local pack = GameLogic.deckPacks[packIdx] or GameLogic.deckPacks[1]
+    
+    local frontFile = "assets/" .. pack.front
+    local backFile = "assets/" .. pack.back
+
+    local s1, fImg = pcall(love.graphics.newImage, frontFile)
+    if s1 then cardSheet = fImg else print("Failed to load front:", frontFile) end
+    
+    local s2, bImg = pcall(love.graphics.newImage, backFile)
+    if s2 then cardBackSheet = bImg else print("Failed to load back:", backFile) end
+    
+    if not cardSheet then return end
+    cardQuads = {}
     
     -- Auto-calculate sprite dimensions based on 13x4 format if SPRITE_W is not set correctly
     local sw, sh = cardSheet:getDimensions()
-    if SPRITE_W == nil or SPRITE_W == 0 then
-        SPRITE_W = sw / 13
-        SPRITE_H = sh / 4
-    end
+    -- always recalculate for custom textures like solo
+    SPRITE_W = sw / 13
+    SPRITE_H = sh / 4
     
     for suitIdx, suit in ipairs(SUITS) do
         cardQuads[suit] = {}

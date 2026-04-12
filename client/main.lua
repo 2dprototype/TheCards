@@ -177,8 +177,19 @@ function setupLobbyUI()
             UI.setText("lbl_time", "Timer: " .. _G.matchTurnTime .. "s")
         end
     end)
+    -- Deck Pack Option
+    local packName = GameLogic.deckPacks[GameLogic.currentDeckPackIdx].name
+    UI.addButton("btn_deck_pack", "Deck: " .. packName, cx - 100, cy + 10, 200, 40, function()
+        GameLogic.currentDeckPackIdx = GameLogic.currentDeckPackIdx + 1
+        if GameLogic.currentDeckPackIdx > #GameLogic.deckPacks then
+            GameLogic.currentDeckPackIdx = 1
+        end
+        local newName = GameLogic.deckPacks[GameLogic.currentDeckPackIdx].name
+        UI.setText("btn_deck_pack", "Deck: " .. newName)
+        GameLogic.loadCardSprites(GameLogic.currentDeckPackIdx)
+    end)
 
-    UI.addButton("btn_start", "Start Game", cx - 100, cy + 50, 200, 50, function()
+    UI.addButton("btn_start", "Start Game", cx - 100, cy + 80, 200, 50, function()
         if Network.roomCode then
             GameLogic.totalRounds = _G.matchRounds
             GameLogic.maxTurnTime = _G.matchTurnTime
@@ -187,7 +198,7 @@ function setupLobbyUI()
             setupGameUI()
         end
     end)
-    UI.addButton("btn_back", "Back", cx - 100, cy + 130, 200, 50, function()
+    UI.addButton("btn_back", "Back", cx - 100, cy + 150, 200, 50, function()
         Network.disconnect()
         appState = "MENU"
         setupMenuUI()
