@@ -23,7 +23,12 @@ function Poker.startRound()
         if not GameLogic.players[i].chips then
             GameLogic.players[i].chips = 1000
         end
+        -- Initialize animation variables
+        GameLogic.players[i].visChips = GameLogic.players[i].chips
+        GameLogic.players[i].visBet = 0
     end
+    
+    Poker.visPot = 0
     
     local deck = GameLogic.generateDeck()
     GameLogic.shuffle(deck)
@@ -314,6 +319,7 @@ function Poker.isBotTurn()
 end
 
 function Poker.update(dt)
+    -- Card sliding animations
     if Poker.communityCards then
         local cx = _G.getW() / 2
         local cy = _G.getH() / 2
@@ -327,6 +333,22 @@ function Poker.update(dt)
             
             c.visX = c.visX + (targetX - c.visX) * dt * 8
             c.visY = c.visY + (targetY - c.visY) * dt * 8
+        end
+    end
+
+    -- Dynamic Chip Animations (Stacks build up/down smoothly)
+    local animSpeed = 5
+    if not Poker.visPot then Poker.visPot = Poker.pot or 0 end
+    Poker.visPot = Poker.visPot + ((Poker.pot or 0) - Poker.visPot) * dt * animSpeed
+
+    for i=1, 4 do
+        local p = GameLogic.players[i]
+        if p then
+            if not p.visChips then p.visChips = p.chips or 0 end
+            if not p.visBet then p.visBet = p.currentBet or 0 end
+            
+            p.visChips = p.visChips + ((p.chips or 0) - p.visChips) * dt * animSpeed
+            p.visBet = p.visBet + ((p.currentBet or 0) - p.visBet) * dt * animSpeed
         end
     end
 end
@@ -346,7 +368,7 @@ local function drawChipStack(amount, x, y, spreadRight)
     local zOffset = 0
     local chipsInStack = 0
 
-    if stackTotal == 0 then return end
+    if stackTotal < 1 then return end
     
     for _, cv in ipairs(chipColors) do
         local num = math.floor(stackTotal / cv.val)
@@ -471,7 +493,7 @@ function Poker.drawCallingUI(cx, cy, W, H)
         end
     end
     
-    -- Draw Player Chips dynamically pushed toward the table center
+    -- Draw Player Chips dynamically
     for i=1, 4 do
         local px, py = GameLogic.getPlayerAnchor(i)
         local p = GameLogic.players[i]
@@ -480,16 +502,29 @@ function Poker.drawCallingUI(cx, cy, W, H)
         local dirX = cx - px
         local dirY = cy - py
         local dist = math.sqrt(dirX*dirX + dirY*dirY)
-        local betX, betY = px, py
         
+        -- 1. Draw Total Bankroll (Available Money Stacks)
+        if (p.visChips or 0) >= 1 then
+            -- Place to the right by default, but flip to the left if player is on the right side of the screen
+            local isRightSide = px > cx
+            local bankX = isRightSide and (px - 90) or (px + 90)
+            local bankY = py + 15
+            drawChipStack(p.visChips, bankX, bankY, not isRightSide)
+            
+            -- Optional label under the bankroll stack
+            GameLogic.drawText("$"..math.floor(p.visChips), bankX - 30, bankY + 10, 60, "center", {0.8, 0.8, 0.8, 1})
+        end
+
+        -- 2. Draw Active Bets
+        local betX, betY = px, py
         if dist > 0 then
             betX = px + (dirX/dist) * 110 -- Push inward by 110px
             betY = py + (dirY/dist) * 110
         end
         
-        if p.currentBet > 0 then
-            drawChipStack(p.currentBet, betX, betY, true)
-            GameLogic.drawText("$"..p.currentBet, betX - 30, betY + 15, 60, "center", {1, 1, 1, 1})
+        if (p.visBet or 0) >= 1 then
+            drawChipStack(p.visBet, betX, betY, true)
+            GameLogic.drawText("$"..math.floor(p.visBet), betX - 30, betY + 15, 60, "center", {1, 1, 1, 1})
         end
         
         -- Dealer Button (pushed inward slightly less and offset)
@@ -506,9 +541,9 @@ function Poker.drawCallingUI(cx, cy, W, H)
     end
     
     -- Draw Pot centrally, safely above the community cards
-    if Poker.pot > 0 then
-        drawChipStack(Poker.pot, cx - 15, cy - 100, true)
-        GameLogic.drawText("POT: $"..Poker.pot, cx - 100, cy - 140, 200, "center", {1, 0.85, 0.2, 1})
+    if (Poker.visPot or 0) >= 1 then
+        drawChipStack(Poker.visPot, cx - 15, cy - 100, true)
+        GameLogic.drawText("POT: $"..math.floor(Poker.visPot), cx - 100, cy - 140, 200, "center", {1, 0.85, 0.2, 1})
     end
 end
 
