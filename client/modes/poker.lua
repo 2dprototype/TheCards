@@ -43,7 +43,7 @@ function Poker.startRound()
         end
     end
     
-    -- Blinds (assuming P1 is dealer conceptually for now, so P2 SB, P3 BB)
+    -- Blinds
     Poker.dealerIdx = (GameLogic.roundNum % 4) + 1
     local sbIdx = (Poker.dealerIdx % 4) + 1
     local bbIdx = (sbIdx % 4) + 1
@@ -82,16 +82,12 @@ function Poker.handleAction(playerIdx, action, amount)
         p.currentBet = p.currentBet + toAdd
         Poker.pot = Poker.pot + toAdd
         Poker.currentBetToMatch = p.currentBet
-        Poker.currentBetToMatch = p.currentBet
     end
     Poker.playersActedThisRound = Poker.playersActedThisRound + 1
     Poker.advanceTurn()
 end
 
 function Poker.advanceTurn()
-    -- Sub task: check if betting round is over
-    -- If over, advance phase (FLOP, TURN, RIVER, SHOWDOWN)
-    
     local activePlayers = 0
     local allMatched = true
     local lastActive = 1
@@ -108,7 +104,6 @@ function Poker.advanceTurn()
     end
     
     if activePlayers == 1 then
-        -- Everyone else folded, lastActive wins
         Poker.awardPot(lastActive)
         return
     end
@@ -305,7 +300,6 @@ end
 function Poker.playTurnBot()
     local p = GameLogic.players[GameLogic.currentPlayer]
     if not p.folded then
-        -- basic bot just calls
         Poker.handleAction(GameLogic.currentPlayer, "CALL")
     else
         Poker.advanceTurn()
@@ -338,11 +332,11 @@ function Poker.update(dt)
 end
 
 local chipColors = {
-    {val=500, col={0.6, 0.1, 0.6, 1}},
-    {val=100, col={0.2, 0.2, 0.2, 1}},
-    {val=25, col={0.2, 0.8, 0.2, 1}},
-    {val=5, col={0.8, 0.2, 0.2, 1}},
-    {val=1, col={0.9, 0.9, 0.9, 1}}
+    {val=500, col={0.5, 0.1, 0.5, 1}},  -- Deep Purple
+    {val=100, col={0.15, 0.15, 0.15, 1}},-- Black
+    {val=25, col={0.1, 0.6, 0.2, 1}},   -- Casino Green
+    {val=5, col={0.8, 0.15, 0.15, 1}},  -- Red
+    {val=1, col={0.9, 0.9, 0.9, 1}}     -- White
 }
 
 local function drawChipStack(amount, x, y, spreadRight)
@@ -350,6 +344,7 @@ local function drawChipStack(amount, x, y, spreadRight)
     local stackTotal = amount
     local hOffset = 0
     local zOffset = 0
+    local chipsInStack = 0
 
     if stackTotal == 0 then return end
     
@@ -358,76 +353,115 @@ local function drawChipStack(amount, x, y, spreadRight)
         stackTotal = stackTotal - (num * cv.val)
         
         for i=1, num do
+            -- Drop Shadow
+            love.graphics.setColor(0, 0, 0, 0.4)
+            love.graphics.circle("fill", cx + hOffset + 2, cy - zOffset + 2, 12)
+
+            -- Base Chip Color
             love.graphics.setColor(cv.col)
             love.graphics.circle("fill", cx + hOffset, cy - zOffset, 12)
-            love.graphics.setColor(1, 1, 1, 0.5)
-            love.graphics.circle("line", cx + hOffset, cy - zOffset, 12)
-            love.graphics.setColor(1, 1, 1, 0.2)
-            love.graphics.circle("line", cx + hOffset, cy - zOffset, 8)
-            zOffset = zOffset + 3
             
-            if zOffset > 15 then 
-                hOffset = hOffset + (spreadRight and 14 or -14)
+            -- Casino Edge Stripes
+            love.graphics.setColor(1, 1, 1, 0.6)
+            love.graphics.setLineWidth(2)
+            love.graphics.line(cx + hOffset - 12, cy - zOffset, cx + hOffset - 7, cy - zOffset)
+            love.graphics.line(cx + hOffset + 7, cy - zOffset, cx + hOffset + 12, cy - zOffset)
+            love.graphics.line(cx + hOffset, cy - zOffset - 12, cx + hOffset, cy - zOffset - 7)
+            love.graphics.line(cx + hOffset, cy - zOffset + 7, cx + hOffset, cy - zOffset + 12)
+            love.graphics.setLineWidth(1)
+            
+            -- Inner detailing
+            love.graphics.setColor(cv.col)
+            love.graphics.circle("fill", cx + hOffset, cy - zOffset, 8)
+            love.graphics.setColor(1, 1, 1, 0.3)
+            love.graphics.circle("line", cx + hOffset, cy - zOffset, 8)
+            love.graphics.setColor(0.1, 0.1, 0.1, 0.8)
+            love.graphics.circle("line", cx + hOffset, cy - zOffset, 12)
+            
+            zOffset = zOffset + 3
+            chipsInStack = chipsInStack + 1
+            
+            -- Build stacks 10 high before spreading out
+            if chipsInStack >= 10 then 
+                hOffset = hOffset + (spreadRight and 26 or -26)
                 zOffset = 0
+                chipsInStack = 0
             end
         end
     end
 end
 
 function Poker.drawScoreboard(cx, cy, W, H)
-    local sbWidth = 280
-    local sbHeight = 80 + (4 * 30)
-    local sbX = W - sbWidth - 15
-    local sbY = 15
+    -- Increased width and height to prevent squishing
+    local sbWidth = 340
+    local sbHeight = 100 + (4 * 35)
+    local sbX = W - sbWidth - 20
+    local sbY = 20
 
-    love.graphics.setColor(0.05, 0.05, 0.1, 0.75)
+    -- Background
+    love.graphics.setColor(0.05, 0.05, 0.1, 0.85)
     love.graphics.rectangle("fill", sbX, sbY, sbWidth, sbHeight, 10)
-    love.graphics.setColor(1, 1, 1, 0.1)
+    love.graphics.setColor(1, 1, 1, 0.15)
     love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 10)
 
+    -- Header
     GameLogic.drawText("SCOREBOARD (Texas Hold'em)", sbX, sbY + 12, sbWidth, "center", {1, 0.85, 0.3, 1})
     
+    -- Entries
     local scoreY = sbY + 50
     for i=1, 4 do
         local p = GameLogic.players[i]
         local pColor = p.folded and {0.5, 0.5, 0.5, 1} or {1, 1, 1, 1}
-        local nameStr = (i == Poker.dealerIdx and "*D* " or "") .. p.name
+        local nameStr = (i == Poker.dealerIdx and "[D] " or "") .. p.name
         
-        GameLogic.drawText(nameStr .. ": $" .. tostring(p.chips), sbX + 15, scoreY, 200, "left", pColor)
+        -- Strict columns prevent text overlap
+        GameLogic.drawText(nameStr, sbX + 15, scoreY, 130, "left", pColor)
+        GameLogic.drawText("$" .. tostring(p.chips), sbX + 150, scoreY, 80, "left", {0.8, 0.8, 0.8, 1})
         
         if p.folded then
-            GameLogic.drawText("[FOLDED]", sbX + 180, scoreY, 80, "left", {0.8, 0.3, 0.3, 1})
+            GameLogic.drawText("FOLD", sbX + 230, scoreY, 95, "right", {0.8, 0.3, 0.3, 1})
         elseif p.currentBet > 0 then
-            GameLogic.drawText("Bet: $" .. p.currentBet, sbX + 180, scoreY, 80, "left", {0.4, 0.9, 0.4, 1})
+            GameLogic.drawText("Bet: $" .. p.currentBet, sbX + 230, scoreY, 95, "right", {0.4, 0.9, 0.4, 1})
+        else
+            GameLogic.drawText("-", sbX + 230, scoreY, 95, "right", {0.4, 0.4, 0.4, 1})
         end
-        scoreY = scoreY + 30
+        scoreY = scoreY + 35
     end
     
+    -- Pot Section
     love.graphics.setColor(1, 0.85, 0.2, 1)
     love.graphics.rectangle("line", sbX + 15, scoreY + 10, sbWidth - 30, 40, 5)
     GameLogic.drawText("CURRENT POT: $" .. Poker.pot, sbX + 15, scoreY + 20, sbWidth - 30, "center", {1, 0.85, 0.2, 1})
 end
 
 function Poker.drawCallingUI(cx, cy, W, H)
+    -- Draw Action Buttons fixed to the BOTTOM CENTER of the screen
     if string.match(GameLogic.phase, "BETTING") and GameLogic.currentPlayer == GameLogic.myPlayerIdx and not GameLogic.players[GameLogic.myPlayerIdx].isBot then
-        -- Draw FOLD / CALL / RAISE
-        local startX = cx - 150
-        local startY = cy + 50
+        local btnWidth = 100
+        local btnHeight = 40
+        local gap = 20
+        -- Total width = (100*3) + (20*2) = 340. Half is 170.
+        local startX = cx - 170 
+        local startY = H - 80 -- Anchored to bottom
+        
         local p = GameLogic.players[GameLogic.myPlayerIdx]
         local toCall = Poker.currentBetToMatch - p.currentBet
         local callStr = (toCall == 0) and "CHECK" or ("CALL $" .. toCall)
         
-        love.graphics.setColor(1, 0.2, 0.2, 1)
-        love.graphics.rectangle("fill", startX, startY, 80, 40, 8)
-        GameLogic.drawText("FOLD", startX, startY + 10, 80, "center")
+        -- FOLD
+        love.graphics.setColor(0.8, 0.2, 0.2, 1)
+        love.graphics.rectangle("fill", startX, startY, btnWidth, btnHeight, 8)
+        GameLogic.drawText("FOLD", startX, startY + 10, btnWidth, "center")
         
+        -- CALL/CHECK
         love.graphics.setColor(0.2, 0.8, 0.2, 1)
-        love.graphics.rectangle("fill", startX + 100, startY, 80, 40, 8)
-        GameLogic.drawText(callStr, startX + 100, startY + 10, 80, "center")
+        love.graphics.rectangle("fill", startX + btnWidth + gap, startY, btnWidth, btnHeight, 8)
+        GameLogic.drawText(callStr, startX + btnWidth + gap, startY + 10, btnWidth, "center")
         
-        love.graphics.setColor(0.2, 0.2, 0.8, 1)
-        love.graphics.rectangle("fill", startX + 200, startY, 80, 40, 8)
-        GameLogic.drawText("RAISE $20", startX + 200, startY + 10, 80, "center")
+        -- RAISE
+        love.graphics.setColor(0.2, 0.4, 0.8, 1)
+        love.graphics.rectangle("fill", startX + (btnWidth + gap) * 2, startY, btnWidth, btnHeight, 8)
+        GameLogic.drawText("RAISE $20", startX + (btnWidth + gap) * 2, startY + 10, btnWidth, "center")
     end
     
     -- Draw Community Cards
@@ -437,56 +471,67 @@ function Poker.drawCallingUI(cx, cy, W, H)
         end
     end
     
-    -- Draw Player Chips on Table
+    -- Draw Player Chips dynamically pushed toward the table center
     for i=1, 4 do
         local px, py = GameLogic.getPlayerAnchor(i)
         local p = GameLogic.players[i]
         
-        -- Adjust to sit in front of players on table
-        local cx = px
-        local cy = py
+        -- Calculate vector toward center to push bets neatly into the middle
+        local dirX = cx - px
+        local dirY = cy - py
+        local dist = math.sqrt(dirX*dirX + dirY*dirY)
+        local betX, betY = px, py
         
-        if GameLogic.myPlayerIdx == i then cy = cy - 40
-        elseif GameLogic.myPlayerIdx == (i-1 == 0 and 4 or i-1) then cx = cx + 80
-        elseif GameLogic.myPlayerIdx == (i-2 <= 0 and i+2 or i-2) then cy = cy + 120
-        elseif GameLogic.myPlayerIdx == (i+1 == 5 and 1 or i+1) then cx = cx - 80 end
-        
-        if p.currentBet > 0 then
-            drawChipStack(p.currentBet, cx, cy, true)
-            GameLogic.drawText("$"..p.currentBet, cx - 25, cy + 10, 50, "center", {1, 1, 1, 1})
+        if dist > 0 then
+            betX = px + (dirX/dist) * 110 -- Push inward by 110px
+            betY = py + (dirY/dist) * 110
         end
         
-        -- Dealer Button
+        if p.currentBet > 0 then
+            drawChipStack(p.currentBet, betX, betY, true)
+            GameLogic.drawText("$"..p.currentBet, betX - 30, betY + 15, 60, "center", {1, 1, 1, 1})
+        end
+        
+        -- Dealer Button (pushed inward slightly less and offset)
         if Poker.dealerIdx == i then
+            local dbX = px + (dirX/dist) * 60 - 25
+            local dbY = py + (dirY/dist) * 60
+            
             love.graphics.setColor(0.9, 0.9, 0.9, 1)
-            love.graphics.circle("fill", cx - 30, cy, 14)
+            love.graphics.circle("fill", dbX, dbY, 14)
             love.graphics.setColor(0.1, 0.1, 0.1, 1)
-            love.graphics.circle("line", cx - 30, cy, 14, 3)
-            GameLogic.drawText("D", cx - 40, cy - 6, 20, "center", {0.1, 0.1, 0.1, 1})
+            love.graphics.circle("line", dbX, dbY, 14, 3)
+            GameLogic.drawText("D", dbX - 10, dbY - 7, 20, "center", {0.1, 0.1, 0.1, 1})
         end
     end
     
-    -- Draw Pot in center
+    -- Draw Pot centrally, safely above the community cards
     if Poker.pot > 0 then
-        drawChipStack(Poker.pot, cx - 40, cy - 140, true)
-        GameLogic.drawText("POT: $"..Poker.pot, cx - 100, cy - 120, 120, "center", {1, 0.85, 0.2, 1})
+        drawChipStack(Poker.pot, cx - 15, cy - 100, true)
+        GameLogic.drawText("POT: $"..Poker.pot, cx - 100, cy - 140, 200, "center", {1, 0.85, 0.2, 1})
     end
 end
 
 function Poker.mousepressed(x, y, button)
-    local cx, cy = _G.getW() / 2, _G.getH() / 2
+    local W, H = _G.getW(), _G.getH()
+    local cx, cy = W / 2, H / 2
+    
     if string.match(GameLogic.phase, "BETTING") and GameLogic.currentPlayer == GameLogic.myPlayerIdx then
-        local startX = cx - 150
-        local startY = cy + 50
-        if x >= startX and x <= startX + 80 and y >= startY and y <= startY + 40 then
+        local btnWidth = 100
+        local btnHeight = 40
+        local gap = 20
+        local startX = cx - 170
+        local startY = H - 80 -- Updated to match the new bottom-anchored drawing
+        
+        if x >= startX and x <= startX + btnWidth and y >= startY and y <= startY + btnHeight then
             -- FOLD
             if GameLogic.mode == "GUEST" then require("network").sendGameMessage("host", {action="POKER_ACTION", type="FOLD"})
             else Poker.handleAction(GameLogic.myPlayerIdx, "FOLD") end
-        elseif x >= startX + 100 and x <= startX + 180 and y >= startY and y <= startY + 40 then
+        elseif x >= startX + btnWidth + gap and x <= startX + btnWidth*2 + gap and y >= startY and y <= startY + btnHeight then
             -- CALL
             if GameLogic.mode == "GUEST" then require("network").sendGameMessage("host", {action="POKER_ACTION", type="CALL"})
             else Poker.handleAction(GameLogic.myPlayerIdx, "CALL") end
-        elseif x >= startX + 200 and x <= startX + 280 and y >= startY and y <= startY + 40 then
+        elseif x >= startX + (btnWidth + gap)*2 and x <= startX + (btnWidth + gap)*2 + btnWidth and y >= startY and y <= startY + btnHeight then
             -- RAISE
             if GameLogic.mode == "GUEST" then require("network").sendGameMessage("host", {action="POKER_ACTION", type="RAISE", amount=20})
             else Poker.handleAction(GameLogic.myPlayerIdx, "RAISE", 20) end
@@ -494,9 +539,8 @@ function Poker.mousepressed(x, y, button)
     end
 end
 
-function Poker.canPlayCard(card, hand) return false end -- No playing from hand
+function Poker.canPlayCard(card, hand) return false end 
 
--- Expose to engine sync
 function Poker.applyStateExt(state)
     Poker.communityCards = state.communityCards or {}
     Poker.pot = state.pot or 0
