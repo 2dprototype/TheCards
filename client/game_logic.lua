@@ -1,4 +1,3 @@
-local Bot = require("bot")
 local Network = require("network")
 
 local GameLogic = {}
@@ -42,6 +41,9 @@ end
 GameLogic.mode = "OFFLINE" -- "OFFLINE", "HOST", "GUEST"
 GameLogic.phase = "WAITING" -- "WAITING", "DEALING", "CALLING", "PLAYING", "ROUND_OVER", "MATCH_OVER"
 
+GameLogic.currentModeName = "call_bridge"
+GameLogic.activeMode = nil
+
 GameLogic.players = {} -- array of 4 players
 GameLogic.myPlayerIdx = 1
 GameLogic.currentPlayer = 1
@@ -68,14 +70,24 @@ function GameLogic.load()
     GameLogic.loadCardSprites(GameLogic.currentDeckPackIdx)
 end
 
-function GameLogic.startOfflineGame()
+function GameLogic.loadMode(modeName)
+    GameLogic.currentModeName = modeName
+    GameLogic.activeMode = require("modes." .. modeName)
+    if GameLogic.activeMode.init then
+        GameLogic.activeMode.init(GameLogic)
+    end
+end
+
+function GameLogic.startOfflineGame(modeName)
     GameLogic.mode = "OFFLINE"
+    GameLogic.loadMode(modeName or "call_bridge")
     GameLogic.initPlayers()
     GameLogic.startRound()
 end
 
-function GameLogic.startOnlineHostGame()
+function GameLogic.startOnlineHostGame(modeName)
     GameLogic.mode = "HOST"
+    GameLogic.loadMode(modeName or "call_bridge")
     GameLogic.initPlayers()
     -- Sync game start to guests
     Network.sendGameMessage("all", { type = "STATE_UPDATE", state = GameLogic.getState() })
@@ -106,6 +118,11 @@ function GameLogic.initPlayers()
 end
 
 function GameLogic.startRound()
+    if GameLogic.activeMode and GameLogic.activeMode.startRound then
+        GameLogic.activeMode.startRound()
+        return
+    end
+    
     GameLogic.phase = "DEALING"
     GameLogic.trick = {}
     GameLogic.flyingCards = {}
@@ -167,13 +184,8 @@ function GameLogic.shuffle(deck)
 end
 
 function GameLogic.playTurnBot()
-    local p = GameLogic.players[GameLogic.currentPlayer]
-    if GameLogic.phase == "CALLING" then
-        p.call = Bot.makeCall(p.hand)
-        GameLogic.advanceTurn()
-    elseif GameLogic.phase == "PLAYING" then
-        local idx, card = Bot.playCard(p.hand, GameLogic.trickLeadSuit, GameLogic.trick, p.call, p.tricksWon)
-        GameLogic.playCard(GameLogic.currentPlayer, idx)
+    if GameLogic.activeMode and GameLogic.activeMode.playTurnBot then
+        GameLogic.activeMode.playTurnBot()
     end
 end
 
@@ -206,6 +218,11 @@ function GameLogic.playCard(playerIdx, cardIdx)
 end
 
 function GameLogic.advanceTurn()
+    if GameLogic.activeMode and GameLogic.activeMode.advanceTurn then
+        GameLogic.activeMode.advanceTurn()
+        return
+    end
+
     if GameLogic.phase == "CALLING" then
         GameLogic.currentPlayer = GameLogic.currentPlayer + 1
         if GameLogic.currentPlayer > 4 then GameLogic.currentPlayer = 1 end
@@ -232,36 +249,25 @@ local evalTimer = 0
 function GameLogic.update(dt)
     -- We allow guests to run update for visual animations, but guard logic
     
-    if GameLogic.phase == "CALLING" or GameLogic.phase == "PLAYING" then
-        if GameLogic.players[GameLogic.currentPlayer].isBot then
-            -- Bot thinking delay
-            evalTimer = evalTimer + dt
-            if evalTimer > 1.0 then
-                evalTimer = 0
-                if GameLogic.mode ~= "GUEST" then
-                    GameLogic.playTurnBot()
-                end
-            end
-        end
-        
-        if GameLogic.turnTimer then
-            GameLogic.turnTimer = GameLogic.turnTimer - dt
-            if GameLogic.turnTimer < 0 then
-                GameLogic.turnTimer = 0
-                if GameLogic.mode ~= "GUEST" and not GameLogic.players[GameLogic.currentPlayer].isBot then
-                    GameLogic.playTurnBot()
-                end
-            end
-        end
-    elseif GameLogic.phase == "EVAL_TRICK" then
+    local isBotTurnCheck = false
+    if GameLogic.activeMode and GameLogic.activeMode.isBotTurn then
+        isBotTurnCheck = GameLogic.activeMode.isBotTurn()
+    else
+        isBotTurnCheck = (GameLogic.phase == "CALLING" or GameLogic.phase == "PLAYING") and GameLogic.players[GameLogic.currentPlayer].isBot
+    end
+    
+    if isBotTurnCheck then
+        -- Bot thinking delay
         evalTimer = evalTimer + dt
-        if evalTimer > 2.0 then
+        if evalTimer > 1.0 then
             evalTimer = 0
             if GameLogic.mode ~= "GUEST" then
-                GameLogic.resolveTrick()
+                GameLogic.playTurnBot()
             end
         end
-    elseif GameLogic.phase == "ROUND_OVER" then
+    end  -- <-- This 'end' was missing
+
+    if GameLogic.phase == "ROUND_OVER" then
         evalTimer = evalTimer + dt
         if evalTimer > 5.0 then
             evalTimer = 0
@@ -272,6 +278,16 @@ function GameLogic.update(dt)
                 else
                     GameLogic.roundNum = GameLogic.roundNum + 1
                     GameLogic.startRound()
+                end
+            end
+        end
+    elseif not (GameLogic.phase == "DEALING" or GameLogic.phase == "EVAL_TRICK") then
+        if GameLogic.turnTimer then
+            GameLogic.turnTimer = GameLogic.turnTimer - dt
+            if GameLogic.turnTimer < 0 then
+                GameLogic.turnTimer = 0
+                if GameLogic.mode ~= "GUEST" and not GameLogic.players[GameLogic.currentPlayer].isBot then
+                    GameLogic.playTurnBot()
                 end
             end
         end
@@ -342,6 +358,10 @@ function GameLogic.update(dt)
             c.visY = c.visY + (targetY - c.visY) * dt * lerpSpeed
         end
     end
+    
+    if GameLogic.activeMode and GameLogic.activeMode.update then
+        GameLogic.activeMode.update(dt)
+    end
 end
 
 function GameLogic.handlePlayerDropped(clientId)
@@ -357,80 +377,7 @@ function GameLogic.handlePlayerDropped(clientId)
     end
 end
 
-function GameLogic.resolveTrick()
-    local winnerIdx = GameLogic.trick[1].playerIdx
-    local bestCard = GameLogic.trick[1].card
-    
-    for i = 2, 4 do
-        local currentEntry = GameLogic.trick[i]
-        local c = currentEntry.card
-        local pIdx = currentEntry.playerIdx
-        
-        -- 1. Check if current card is a Spade (Trump)
-        -- 2. Check if best card is a Spade (Trump)
-        
-        if c.suit == "S" and bestCard.suit ~= "S" then
-            -- Current is Spade, Best is NOT Spade -> Current Wins
-            bestCard = c
-            winnerIdx = pIdx
-        elseif c.suit == "S" and bestCard.suit == "S" then
-            -- Both are Spades -> Higher Rank Wins
-            if rankValues[c.rank] > rankValues[bestCard.rank] then
-                bestCard = c
-                winnerIdx = pIdx
-            end
-        elseif c.suit ~= "S" and bestCard.suit ~= "S" then
-            -- Neither is a Spade
-            -- Does Current follow lead suit?
-            if c.suit == GameLogic.trickLeadSuit then
-                -- If Best follows lead suit, compare ranks. If Best DOES NOT follow lead suit, Current wins automatically.
-                if bestCard.suit ~= GameLogic.trickLeadSuit then
-                    bestCard = c
-                    winnerIdx = pIdx
-                elseif rankValues[c.rank] > rankValues[bestCard.rank] then
-                    bestCard = c
-                    winnerIdx = pIdx
-                end
-            end
-            -- Note: If c.suit ~= lead suit and bestCard DOES follow lead suit, current card loses (ignored).
-        end
-        -- Note: If bestCard is Spade and current is NOT Spade -> current loses (ignored).
-    end
-    
-    GameLogic.players[winnerIdx].tricksWon = GameLogic.players[winnerIdx].tricksWon + 1
-    
-    -- Animate Trick Gathering
-    for _, t in ipairs(GameLogic.trick) do
-        table.insert(GameLogic.flyingCards, { card = t.card, targetId = winnerIdx }) 
-    end
-    
-    GameLogic.trick = {}
-    GameLogic.trickLeadSuit = nil
-    
-    GameLogic.currentPlayer = winnerIdx
-    GameLogic.phase = "PLAYING"
-    GameLogic.turnTimer = GameLogic.maxTurnTime or 15
-    
-    -- Check round over
-    local cardsLeft = #GameLogic.players[1].hand
-    if cardsLeft == 0 then
-        GameLogic.phase = "ROUND_OVER"
-        GameLogic.calculateScores()
-    end
-    
-    GameLogic.syncState()
-end
-
-function GameLogic.calculateScores()
-    for i=1, 4 do
-        local p = GameLogic.players[i]
-        if p.tricksWon >= p.call then
-            p.score = p.score + p.call + ((p.tricksWon - p.call) * 0.1)
-        else
-            p.score = p.score - p.call
-        end
-    end
-end
+-- Removed resolveTrick and calculateScores (Moved to mode)
 
 -- Network Sync
 function GameLogic.syncState()
@@ -461,6 +408,9 @@ function GameLogic.getStateFor(clientId)
     for i=1, 4 do
         local p = GameLogic.players[i]
         local pSafe = { name = p.name, call = p.call, tricksWon = p.tricksWon, score = p.score, id = p.id, isBot = p.isBot }
+        if GameLogic.activeMode and GameLogic.activeMode.getPlayerStateExt then
+            GameLogic.activeMode.getPlayerStateExt(p, pSafe)
+        end
         if p.id == clientId then
             pSafe.hand = p.hand
             pSafe.isMe = true
@@ -470,6 +420,10 @@ function GameLogic.getStateFor(clientId)
         table.insert(state.players, pSafe)
     end
     state.deckPackIdx = GameLogic.currentDeckPackIdx
+    state.modeName = GameLogic.currentModeName
+    if GameLogic.activeMode and GameLogic.activeMode.getStateExt then
+        GameLogic.activeMode.getStateExt(state)
+    end
     return state
 end
 
@@ -481,21 +435,29 @@ function GameLogic.handleNetworkMessage(evt)
     if evt.type == "GUEST_MSG" and GameLogic.mode == "HOST" then
         -- Input from guest
         local data = evt.data
-        if data.action == "MAKE_CALL" then
-            -- find player
-            for i=1, 4 do 
-                if GameLogic.players[i].id == evt.clientId and i == GameLogic.currentPlayer and GameLogic.phase == "CALLING" then
-                    GameLogic.players[i].call = data.call
-                    GameLogic.advanceTurn()
-                    break
+        local handled = false
+        
+        if GameLogic.activeMode and GameLogic.activeMode.handleNetworkMessage then
+            handled = GameLogic.activeMode.handleNetworkMessage(evt)
+        end
+        
+        if not handled then
+            if data.action == "MAKE_CALL" then
+                -- find player
+                for i=1, 4 do 
+                    if GameLogic.players[i].id == evt.clientId and i == GameLogic.currentPlayer and GameLogic.phase == "CALLING" then
+                        GameLogic.players[i].call = data.call
+                        GameLogic.advanceTurn()
+                        break
+                    end
                 end
-            end
-        elseif data.action == "PLAY_CARD" then
-            for i=1, 4 do 
-                if GameLogic.players[i].id == evt.clientId and i == GameLogic.currentPlayer and GameLogic.phase == "PLAYING" then
-                    -- Verify hand idx
-                    GameLogic.playCard(i, data.cardIdx)
-                    break
+            elseif data.action == "PLAY_CARD" then
+                for i=1, 4 do 
+                    if GameLogic.players[i].id == evt.clientId and i == GameLogic.currentPlayer and GameLogic.phase == "PLAYING" then
+                        -- Verify hand idx
+                        GameLogic.playCard(i, data.cardIdx)
+                        break
+                    end
                 end
             end
         end
@@ -531,9 +493,17 @@ function GameLogic.applyStateUpdate(state)
     GameLogic.totalRounds = state.totalRounds or 5
     GameLogic.maxTurnTime = state.maxTurnTime or 15
     
+    if GameLogic.activeMode and GameLogic.activeMode.applyStateExt then
+        GameLogic.activeMode.applyStateExt(state)
+    end
+    
     if state.deckPackIdx and state.deckPackIdx ~= GameLogic.currentDeckPackIdx then
         GameLogic.currentDeckPackIdx = state.deckPackIdx
         GameLogic.loadCardSprites(GameLogic.currentDeckPackIdx)
+    end
+    
+    if state.modeName and state.modeName ~= GameLogic.currentModeName then
+        GameLogic.loadMode(state.modeName)
     end
     
     GameLogic.players = state.players
@@ -549,6 +519,9 @@ function GameLogic.applyStateUpdate(state)
                 end
             end
         end
+        if GameLogic.activeMode and GameLogic.activeMode.applyPlayerStateExt then
+            GameLogic.activeMode.applyPlayerStateExt(state.players[i], GameLogic.players[i])
+        end
     end
 end
 
@@ -559,6 +532,11 @@ function GameLogic.setupUI()
     -- UI logic mixed with drawing per frame using immediate mode is easier
 end
 
+function GameLogic.drawText(text, x, y, w, align, color)
+    love.graphics.setColor(color or {1, 1, 1, 1})
+    love.graphics.printf(text, x, y, w, align)
+end
+
 function GameLogic.draw()
     if #GameLogic.players == 0 then return end
 
@@ -567,18 +545,12 @@ function GameLogic.draw()
     local font = love.graphics.getFont()
     local fontH = font:getHeight()
 
-    -- Helper to draw professional text with drop shadow
-    local function drawText(text, x, y, w, align, color)
-        love.graphics.setColor(color or {1, 1, 1, 1})
-        love.graphics.printf(text, x, y, w, align)
-    end
-
     if GameLogic.phase == "MATCH_OVER" then
         -- Professional Match Over Overlay
         love.graphics.setColor(0.05, 0.05, 0.1, 0.8)
         love.graphics.rectangle("fill", cx - 250, cy - 200, 500, 400, 16)
 
-        drawText("MATCH OVER - FINAL SCORES", 0, cy - 150, W, "center", {1, 0.85, 0.3, 1})
+        GameLogic.drawText("MATCH OVER - FINAL SCORES", 0, cy - 150, W, "center", {1, 0.85, 0.3, 1})
 
         local sorted = {}
         for i = 1, 4 do table.insert(sorted, GameLogic.players[i]) end
@@ -586,7 +558,7 @@ function GameLogic.draw()
 
         for i, p in ipairs(sorted) do
             local pColor = (p.id == GameLogic.players[GameLogic.myPlayerIdx].id) and {0.3, 0.95, 0.4, 1} or {1, 1, 1, 1}
-            drawText(i .. ". " .. p.name .. " - Score: " .. string.format("%.1f", p.score),
+            GameLogic.drawText(i .. ". " .. p.name .. " - Score: " .. string.format("%.1f", p.score),
                            0, cy - 70 + (i * 45), W, "center", pColor)
         end
         return
@@ -609,7 +581,7 @@ function GameLogic.draw()
                 bestCard = c; winnerIdx = pIdx
             end
         end
-        drawText(GameLogic.players[winnerIdx].name .. " wins trick!", 0, cy + 90, W, "center", {1, 0.85, 0.3, 1})
+        GameLogic.drawText(GameLogic.players[winnerIdx].name .. " wins trick!", 0, cy + 90, W, "center", {1, 0.85, 0.3, 1})
     end
 
     -- 4. Player Names (Centered and Rotated precisely on sides)
@@ -651,17 +623,17 @@ function GameLogic.draw()
             love.graphics.rectangle("fill", -80, -12, 160, 24, 12)
         end
 
-        drawText(p.name, -100, -fontH / 2, 200, "center", pColor)
+        GameLogic.drawText(p.name, -100, -fontH / 2, 200, "center", pColor)
 
         if isCurrent and p.isBot and (GameLogic.phase == "CALLING" or GameLogic.phase == "PLAYING") then
-            drawText("Thinking...", -100, (fontH / 2) + 4, 200, "center", {0.6, 0.6, 0.6, 1})
+            GameLogic.drawText("Thinking...", -100, (fontH / 2) + 4, 200, "center", {0.6, 0.6, 0.6, 1})
         end
 
         love.graphics.pop()
         
         -- Draw Hand Backs for Opponents Beautifully fanned out
         local hSize = p.handSize or (p.hand and #p.hand) or 0
-        if pos ~= "BOTTOM" and hSize > 0 then
+        if (pos ~= "BOTTOM" or GameLogic.mode == "GUEST") and hSize > 0 then
             local rotStep = 0.1
             local totalArc = (hSize - 1) * rotStep
             local startRot = -totalArc / 2
@@ -675,27 +647,24 @@ function GameLogic.draw()
                     GameLogic.drawCardBack(cx - offset, 140, rz)
                 elseif pos == "RIGHT" then 
                     GameLogic.drawCardBack(_G.getW() - 140, cy - offset, math.pi/2 + rz) 
+                elseif pos == "BOTTOM" then
+                    GameLogic.drawCardBack(cx + offset, _G.getH() - 140, rz)
                 end
             end
         end
     end
     
     -- 5. Draw Local Hand
-    local myP = GameLogic.players[GameLogic.myPlayerIdx]
-    if myP and myP.hand then
-        for i, c in ipairs(myP.hand) do
-            local valid = true
-            if GameLogic.phase == "PLAYING" and GameLogic.currentPlayer == GameLogic.myPlayerIdx and not myP.isBot and GameLogic.trickLeadSuit then
-                if c.suit ~= GameLogic.trickLeadSuit then
-                    for _, hc in ipairs(myP.hand) do
-                        if hc.suit == GameLogic.trickLeadSuit then
-                            valid = false
-                            break
-                        end
-                    end
+    if GameLogic.mode ~= "GUEST" then
+        local myP = GameLogic.players[GameLogic.myPlayerIdx]
+        if myP and myP.hand then
+            for i, c in ipairs(myP.hand) do
+                local valid = true
+                if GameLogic.activeMode and GameLogic.activeMode.canPlayCard then
+                    valid = GameLogic.activeMode.canPlayCard(c, myP.hand)
                 end
+                GameLogic.drawCard(c, c.visX or 0, c.visY or 0, valid)
             end
-            GameLogic.drawCard(c, c.visX or 0, c.visY or 0, valid)
         end
     end
 
@@ -717,100 +686,22 @@ function GameLogic.draw()
     love.graphics.setColor(1, 1, 1, 0.1)
     love.graphics.rectangle("line", 15, 15, 200, 80, 10)
 
-    drawText("Round: " .. GameLogic.roundNum .. "/" .. (GameLogic.totalRounds or 5), 25, 25, 180, "left", {0.9, 0.9, 0.9, 1})
-    drawText("Phase: " .. GameLogic.phase, 25, 45, 180, "left", {0.8, 0.8, 0.8, 1})
+    GameLogic.drawText("Round: " .. GameLogic.roundNum .. "/" .. (GameLogic.totalRounds or 5), 25, 25, 180, "left", {0.9, 0.9, 0.9, 1})
+    GameLogic.drawText("Phase: " .. GameLogic.phase, 25, 45, 180, "left", {0.8, 0.8, 0.8, 1})
 
     if (GameLogic.phase == "CALLING" or GameLogic.phase == "PLAYING") and GameLogic.turnTimer then
         local tColor = GameLogic.turnTimer <= 5 and {1, 0.4, 0.4, 1} or {0.4, 0.9, 1, 1}
-        drawText("Time: " .. math.ceil(GameLogic.turnTimer) .. "s", 25, 65, 180, "left", tColor)
+        GameLogic.drawText("Time: " .. math.ceil(GameLogic.turnTimer) .. "s", 25, 65, 180, "left", tColor)
     end
 
-    -- 2. Scoreboard (Top-Right)
-    local sbWidth = 280 -- Increased slightly for more breathing room
-    local sbHeight = 80 + (4 * 30)
-    local sbX = W - sbWidth - 15
-    local sbY = 15
-
-    -- Background & Border
-    love.graphics.setColor(0.05, 0.05, 0.1, 0.75)
-    love.graphics.rectangle("fill", sbX, sbY, sbWidth, sbHeight, 10)
-    love.graphics.setColor(1, 1, 1, 0.1)
-    love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 10)
-
-    -- Header
-    drawText("SCOREBOARD", sbX, sbY + 12, sbWidth, "center", {1, 0.85, 0.3, 1})
-
-    -- Column Definitions (X-Offsets relative to sbX)
-    local colName  = 15
-    local colCall  = 130
-    local colTrick = 180
-    local colScore = 230
-
-    -- Sub-header Labels
-    local labelY = sbY + 35
-    local labelColor = {0.6, 0.6, 0.6, 1}
-    drawText("Player", sbX + colName, labelY, 100, "left", labelColor)
-    drawText("C",      sbX + colCall, labelY, 40,  "center", labelColor)
-    drawText("T",      sbX + colTrick, labelY, 40, "center", labelColor)
-    drawText("Pts",    sbX + colScore, labelY, 40, "right", labelColor)
-
-    love.graphics.setColor(1, 1, 1, 0.1)
-    love.graphics.line(sbX + 10, sbY + 55, sbX + sbWidth - 10, sbY + 55)
-
-    -- Table Rows
-    local scoreY = sbY + 65
-    for i = 1, 4 do
-        local p = GameLogic.players[i]
-        local isCurrent = (i == GameLogic.currentPlayer)
-        if isCurrent then
-            love.graphics.setColor(1, 1, 1, 0.05)
-            love.graphics.rectangle("fill", sbX + 5, scoreY - 5, sbWidth - 10, 25, 4)
-        end
-        local pColor = isCurrent and {0.3, 0.95, 0.4, 1} or {0.95, 0.95, 0.95, 1}
-        drawText(p.name, sbX + colName, scoreY, colCall - colName - 5, "left", pColor)
-        drawText(tostring(p.call or 0), sbX + colCall, scoreY, 40, "center", pColor)
-        drawText(tostring(p.tricksWon or 0), sbX + colTrick, scoreY, 40, "center", pColor)
-        drawText(string.format("%.1f", p.score or 0), sbX + colScore, scoreY, 40, "right", pColor)
-        scoreY = scoreY + 30
+    -- 2. Scoreboard (Mode Specific)
+    if GameLogic.activeMode and GameLogic.activeMode.drawScoreboard then
+        GameLogic.activeMode.drawScoreboard(cx, cy, W, H)
     end
-
-    -- -- 3. Center Trick Info
-    -- if GameLogic.trickLeadSuit then
-        -- local suitNames = {S = "Spades", H = "Hearts", D = "Diamonds", C = "Clubs"}
-        -- drawText("Lead Suit: " .. suitNames[GameLogic.trickLeadSuit], 0, cy - 90, W, "center", {1, 0.8, 0.8, 1})
-    -- end
     
-    -- 7. Draw Calling UI
-    if GameLogic.phase == "CALLING" and GameLogic.currentPlayer == GameLogic.myPlayerIdx and not GameLogic.players[GameLogic.currentPlayer].isBot then
-        local boxW = 8 * 55
-        local startX = cx - (boxW / 2)
-        local startY = cy + 50
-        
-        -- Dark Background Panel
-        love.graphics.setColor(0.05, 0.05, 0.1, 0.85)
-        love.graphics.rectangle("fill", startX - 20, startY - 40, boxW + 40, 110, 12)
-        love.graphics.setColor(1, 1, 1, 0.1)
-        love.graphics.rectangle("line", startX - 20, startY - 40, boxW + 40, 110, 12)
-
-        drawText("Make Your Call:", 0, startY - 25, W, "center", {1, 1, 1, 1})
-
-        local mx, my = love.mouse.getPosition()
-        for j = 1, 8 do
-            local bx = startX + ((j - 1) * 55)
-            local by = startY + 10
-
-            local isHovered = (mx >= bx and mx <= bx + 45 and my >= by and my <= by + 45)
-
-            if isHovered then
-                love.graphics.setColor(0.3, 0.7, 1.0, 1)
-                love.graphics.rectangle("fill", bx, by - 5, 45, 50, 8)
-                drawText(tostring(j), bx, by + 12, 45, "center", {0, 0, 0, 1})
-            else
-                love.graphics.setColor(0.15, 0.25, 0.45, 1)
-                love.graphics.rectangle("fill", bx, by, 45, 45, 8)
-                drawText(tostring(j), bx, by + 12, 45, "center", {1, 1, 1, 1})
-            end
-        end
+    -- 7. Draw Calling UI (Mode Specific)
+    if GameLogic.activeMode and GameLogic.activeMode.drawCallingUI then
+        GameLogic.activeMode.drawCallingUI(cx, cy, W, H)
     end
 end
 
@@ -924,24 +815,11 @@ function GameLogic.mousepressed(x, y, button)
     
     local cx, cy = _G.getW() / 2, _G.getH() / 2
     
-    if GameLogic.phase == "CALLING" then
-        local boxW = 8 * 50
-        local startX = cx - (boxW / 2)
-        local startY = cy + 50
-        
-        for j = 1, 8 do
-            local bx = startX + ((j-1) * 50)
-            local by = startY
-            if x >= bx and x <= bx+40 and y >= by and y <= by+40 then
-                if GameLogic.mode == "GUEST" then
-                    Network.sendGameMessage("host", { action = "MAKE_CALL", call = j })
-                else
-                    GameLogic.players[GameLogic.myPlayerIdx].call = j
-                    GameLogic.advanceTurn()
-                end
-            end
-        end
-    elseif GameLogic.phase == "PLAYING" then
+    if GameLogic.activeMode and GameLogic.activeMode.mousepressed then
+        GameLogic.activeMode.mousepressed(x, y, button)
+    end
+    
+    if GameLogic.phase == "PLAYING" then
         local myP = GameLogic.players[GameLogic.myPlayerIdx]
         if not myP.hand then return end
         
@@ -960,20 +838,13 @@ function GameLogic.mousepressed(x, y, button)
             if x >= cardX and x <= cardX + wCheck and y >= cardY and y <= cardY + CARD_H then
                 -- Check valid follow suit
                 local isValid = true
-                if GameLogic.trickLeadSuit then
-                    if c.suit ~= GameLogic.trickLeadSuit then
-                         -- Do we have a card of lead suit?
-                         for _, hc in ipairs(myP.hand) do
-                             if hc.suit == GameLogic.trickLeadSuit then
-                                 isValid = false
-                                 break
-                             end
-                         end
-                    end
+                if GameLogic.activeMode and GameLogic.activeMode.canPlayCard then
+                    isValid = GameLogic.activeMode.canPlayCard(c, myP.hand)
                 end
                 
                 if isValid then
                     if GameLogic.mode == "GUEST" then
+                        local Network = require("network")
                         Network.sendGameMessage("host", { action = "PLAY_CARD", cardIdx = i })
                     else
                         GameLogic.playCard(GameLogic.myPlayerIdx, i)

@@ -1,7 +1,6 @@
 local UI = require("ui")
 local Network = require("network")
 local GameLogic = require("game_logic")
-local Bot = require("bot")
 local Config = require("config")
 
 _G.SCREEN_WIDTH = 700
@@ -115,7 +114,7 @@ function setupMenuUI()
         Config.set("username", name)
         GameLogic.totalRounds = _G.matchRounds or 5
         GameLogic.maxTurnTime = _G.matchTurnTime or 15
-        GameLogic.startOfflineGame()
+        GameLogic.startOfflineGame("call_bridge") -- Offline defaults to Call Bridge
         appState = "GAME"
         setupGameUI()
     end)
@@ -139,7 +138,18 @@ function setupSettingsUI()
     UI.addTextInput("input_uri", "e.g. wss://127.0.0.1:8080", cx - 250, cy - 80, 500, 40)
     UI.setText("input_uri", Config.get("server_uri") or "")
     
-    UI.addButton("btn_save_settings", "Save & Back", cx - 100, cy + 80, 200, 50, function()
+    UI.addLabel("lbl_window", "Window Settings", cx - 70, cy - 10)
+    UI.addButton("btn_win_normal", "Normal", cx - 210, cy + 30, 130, 40, function()
+        love.window.setMode(1000, 650, {resizable=true, vsync=true, minwidth=700, minheight=400})
+    end)
+    UI.addButton("btn_win_large", "Large", cx - 65, cy + 30, 130, 40, function()
+        love.window.setMode(1500, 975, {resizable=true, vsync=true, minwidth=700, minheight=400})
+    end)
+    UI.addButton("btn_win_full", "Fullscreen", cx + 80, cy + 30, 130, 40, function()
+        love.window.setFullscreen(true)
+    end)
+    
+    UI.addButton("btn_save_settings", "Save & Back", cx - 100, cy + 120, 200, 50, function()
         local uri = UI.getText("input_uri")
         if uri and #uri > 0 then
             Config.set("server_uri", uri)
@@ -156,6 +166,17 @@ function setupLobbyUI()
     
     if not _G.matchRounds then _G.matchRounds = 5 end
     if not _G.matchTurnTime then _G.matchTurnTime = 15 end
+    if not _G.currentGameModeIdx then _G.currentGameModeIdx = 1 end
+    _G.gameModeNames = {"Call Bridge", "Poker", "Black Jack", "Old Maid"}
+    _G.gameModeFiles = {"call_bridge", "poker", "black_jack", "old_maid"}
+    
+    -- Mode Option
+    local modeName = _G.gameModeNames[_G.currentGameModeIdx]
+    UI.addButton("btn_game_mode", "Mode: " .. modeName, cx - 100, cy - 140, 200, 40, function()
+        _G.currentGameModeIdx = _G.currentGameModeIdx + 1
+        if _G.currentGameModeIdx > #_G.gameModeNames then _G.currentGameModeIdx = 1 end
+        UI.setText("btn_game_mode", "Mode: " .. _G.gameModeNames[_G.currentGameModeIdx])
+    end)
 
     -- Rounds Option
     UI.addLabel("lbl_rounds", "Rounds: " .. _G.matchRounds, cx - 60, cy - 100)
@@ -202,7 +223,7 @@ function setupLobbyUI()
         if Network.roomCode then
             GameLogic.totalRounds = _G.matchRounds
             GameLogic.maxTurnTime = _G.matchTurnTime
-            GameLogic.startOnlineHostGame()
+            GameLogic.startOnlineHostGame(_G.gameModeFiles[_G.currentGameModeIdx])
             appState = "GAME"
             setupGameUI()
         end
@@ -263,6 +284,7 @@ function setupPauseUI()
     end)
     UI.addButton("btn_leave", "Leave Match", cx - 100, cy + 40, 200, 50, function()
         _G.inPauseMenu = false
+        GameLogic.phase = "WAITING"
         Network.disconnect()
         appState = "MENU"
         setupMenuUI()
@@ -273,6 +295,8 @@ _G.setupMatchOverUI = function()
     UI.clear()
     local cx, cy = _G.getW() / 2, _G.getH() / 2
     UI.addButton("btn_leave_match", "Return to Menu", cx - 100, cy + 120, 200, 50, function()
+        _G.inPauseMenu = false
+        GameLogic.phase = "WAITING"
         Network.disconnect()
         appState = "MENU"
         setupMenuUI()
@@ -440,10 +464,14 @@ _G.handleNetworkEvent = function(evt)
         errorMessage = evt.message
     elseif evt.type == "ROOM_CLOSED" then
         errorMessage = "The Host has ended the match or disconnected."
+        _G.inPauseMenu = false
+        GameLogic.phase = "WAITING"
         Network.disconnect()
         UI.clear()
     elseif evt.type == "DISCONNECT" then
         errorMessage = evt.reason
+        _G.inPauseMenu = false
+        GameLogic.phase = "WAITING"
         Network.disconnect()
         UI.clear()
     end

@@ -97,6 +97,7 @@ function UI.hideKeyboard()
 end
 
 function UI.update(dt)
+    UI.time = (UI.time or 0) + dt
     local mx, my = love.mouse.getPosition()
     for _, w in ipairs(widgets) do
         if w.type == "button" or w.type == "textinput" then
@@ -104,6 +105,13 @@ function UI.update(dt)
             if w.isHovered then
                 love.mouse.setCursor(love.mouse.getSystemCursor("hand"))
                 activeWidget = w
+            end
+        end
+        if w.type == "button" then
+            if w.isHovered then
+                w.scale = w.scale and w.scale + (1.05 - w.scale) * dt * 10 or 1.05
+            else
+                w.scale = w.scale and w.scale + (1.0 - w.scale) * dt * 10 or 1.0
             end
         end
     end
@@ -115,43 +123,89 @@ end
 
 function UI.draw()
     love.graphics.setFont(UI.font)
+    
+    local function drawLimitedText(text, x, y, maxW, isHovered)
+        local font = UI.font
+        local tw = font:getWidth(text)
+        local th = font:getHeight()
+        
+        if tw <= maxW then
+            love.graphics.print(text, x + maxW/2 - tw/2, y)
+        else
+            if isHovered and UI.time then
+                -- Marquee scroll
+                local scrollSpeed = 40
+                local scrollW = tw - maxW + 20
+                local offset = (UI.time * scrollSpeed) % (scrollW * 2)
+                if offset > scrollW then offset = scrollW * 2 - offset end
+                
+                -- Need to combine our local scissor with global matrix
+                -- Using stencil instead is cleaner for transformed coordinates
+                local stencilFunc = function()
+                    love.graphics.rectangle("fill", x, y, maxW, th)
+                end
+                love.graphics.stencil(stencilFunc, "replace", 1)
+                love.graphics.setStencilTest("greater", 0)
+                love.graphics.print(text, x - offset, y)
+                love.graphics.setStencilTest()
+            else
+                local currentText = ""
+                local ellW = font:getWidth("...")
+                for i = 1, utf8.len(text) do
+                    local boffset = utf8.offset(text, i)
+                    local char = string.sub(text, boffset, utf8.offset(text, i+1) and utf8.offset(text, i+1)-1 or #text)
+                    if font:getWidth(currentText .. char) + ellW > maxW then break end
+                    currentText = currentText .. char
+                end
+                love.graphics.print(currentText .. "...", x, y)
+            end
+        end
+    end
+
     for _, w in ipairs(widgets) do
         if w.type == "button" then
+            local sw = w.w * (w.scale or 1)
+            local sh = w.h * (w.scale or 1)
+            local sx = w.x - (sw - w.w)/2
+            local sy = w.y - (sh - w.h)/2
+            
             -- Drop shadow
-            love.graphics.setColor(0, 0, 0, 0.3)
-            love.graphics.rectangle("fill", w.x + 2, w.y + 4, w.w, w.h, 8, 8)
+            love.graphics.setColor(0, 0, 0, 0.4)
+            love.graphics.rectangle("fill", sx + 3, sy + 5, sw, sh, 10, 10)
             
             if w.isHovered then
-                love.graphics.setColor(0.35, 0.65, 0.95, 1)
+                love.graphics.setColor(0.35, 0.75, 1.0, 1)
             else
-                love.graphics.setColor(0.2, 0.45, 0.8, 1)
+                love.graphics.setColor(0.2, 0.5, 0.85, 1)
             end
-            love.graphics.rectangle("fill", w.x, w.y, w.w, w.h, 8, 8)
+            love.graphics.rectangle("fill", sx, sy, sw, sh, 10, 10)
             
-            -- Inner highlight
-            love.graphics.setColor(1, 1, 1, 0.1)
-            love.graphics.rectangle("fill", w.x, w.y, w.w, w.h / 2, 8, 8)
+            -- Inner gradient highlight
+            love.graphics.setColor(1, 1, 1, 0.15)
+            love.graphics.rectangle("fill", sx, sy, sw, sh / 2, 10, 10)
             
             love.graphics.setColor(1, 1, 1, 1)
-            local tw = UI.font:getWidth(w.text)
             local th = UI.font:getHeight()
-            love.graphics.print(w.text, w.x + w.w/2 - tw/2, w.y + w.h/2 - th/2)
+            drawLimitedText(w.text, sx + 5, sy + sh/2 - th/2, sw - 10, w.isHovered)
+            
         elseif w.type == "label" then
+            local th = UI.font:getHeight()
             love.graphics.setColor(0, 0, 0, 0.5)
-            love.graphics.print(w.text, w.x + 2, w.y + 2)
+            drawLimitedText(w.text, w.x + 2, w.y + 2, 500, false)
             love.graphics.setColor(1, 1, 1, 1)
-            love.graphics.print(w.text, w.x, w.y)
+            drawLimitedText(w.text, w.x, w.y, 500, false)
+            
         elseif w.type == "textinput" then
             love.graphics.setColor(0, 0, 0, 0.2)
-            love.graphics.rectangle("fill", w.x + 2, w.y + 2, w.w, w.h, 6, 6)
+            love.graphics.rectangle("fill", w.x + 2, w.y + 2, w.w, w.h, 8, 8)
             
             love.graphics.setColor(0.95, 0.95, 0.98, 1)
-            love.graphics.rectangle("fill", w.x, w.y, w.w, w.h, 6, 6)
+            love.graphics.rectangle("fill", w.x, w.y, w.w, w.h, 8, 8)
             
             if w.focused then
-                love.graphics.setColor(0.3, 0.6, 0.9, 0.5)
+                love.graphics.setColor(0.3, 0.7, 1.0, 0.6)
                 love.graphics.setLineWidth(3)
-                love.graphics.rectangle("line", w.x, w.y, w.w, w.h, 6, 6)
+                love.graphics.rectangle("line", w.x, w.y, w.w, w.h, 8, 8)
             end
             
             love.graphics.setColor(0.1, 0.1, 0.1, 1)
@@ -161,14 +215,7 @@ function UI.draw()
                 txt = w.placeholder
             end
             local th = UI.font:getHeight()
-            local tw = UI.font:getWidth(txt)
-            local tx = w.x + 10
-            
-            if tw > w.w - 20 then
-                tx = w.x + w.w - 10 - tw
-            end
-            
-            love.graphics.print(txt, tx, w.y + w.h/2 - th/2)
+            love.graphics.print(txt, w.x + 10, w.y + w.h/2 - th/2)
         end
     end
     
