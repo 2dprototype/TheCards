@@ -37,9 +37,7 @@ end
 
 function love.load(args)
     love.window.setMode(_G.SCREEN_WIDTH, _G.SCREEN_HEIGHT, {resizable=true, vsync=true, minwidth=700, minheight=400})
-    love.window.setTitle("Devil Bridge")
-    love.keyboard.setTextInput(true)
-    love.keyboard.setKeyRepeat(true)
+    love.window.setTitle("TheCards")
     
    
 
@@ -140,10 +138,10 @@ function setupSettingsUI()
     
     UI.addLabel("lbl_window", "Window Settings", cx - 70, cy - 10)
     UI.addButton("btn_win_normal", "Normal", cx - 210, cy + 30, 130, 40, function()
-        love.window.setMode(400, 600, {resizable=true, vsync=true, minwidth=400, minheight=300})
+        love.window.setMode(400, 400, {resizable=true, vsync=true, minwidth=400, minheight=300})
     end)
     UI.addButton("btn_win_large", "Large", cx - 65, cy + 30, 130, 40, function()
-        love.window.setMode(450, 650, {resizable=true, vsync=true, minwidth=400, minheight=300})
+        love.window.setMode(450, 450, {resizable=true, vsync=true, minwidth=400, minheight=300})
     end)
     UI.addButton("btn_win_full", "Fullscreen", cx + 80, cy + 30, 130, 40, function()
         love.window.setFullscreen(true)
@@ -172,10 +170,10 @@ function setupLobbyUI()
     
     -- Mode Option
     local modeName = _G.gameModeNames[_G.currentGameModeIdx]
-    UI.addButton("btn_game_mode", "Mode: " .. modeName, cx - 100, cy - 140, 200, 40, function()
+    UI.addButton("btn_game_mode", modeName, cx - 100, cy + 10, 200, 40, function()
         _G.currentGameModeIdx = _G.currentGameModeIdx + 1
         if _G.currentGameModeIdx > #_G.gameModeNames then _G.currentGameModeIdx = 1 end
-        UI.setText("btn_game_mode", "Mode: " .. _G.gameModeNames[_G.currentGameModeIdx])
+        UI.setText("btn_game_mode", _G.gameModeNames[_G.currentGameModeIdx])
     end)
 
     -- Rounds Option
@@ -187,7 +185,7 @@ function setupLobbyUI()
         end
     end)
     UI.addButton("btn_rounds_plus", "+", cx + 80, cy - 110, 40, 40, function()
-        if _G.matchRounds < 20 then 
+        if _G.matchRounds < 1000 then 
             _G.matchRounds = _G.matchRounds + 1 
             UI.setText("lbl_rounds", "Rounds: " .. _G.matchRounds)
         end
@@ -209,17 +207,17 @@ function setupLobbyUI()
     end)
     -- Deck Pack Option
     local packName = GameLogic.deckPacks[GameLogic.currentDeckPackIdx].name
-    UI.addButton("btn_deck_pack", "Deck: " .. packName, cx - 100, cy + 10, 200, 40, function()
+    UI.addButton("btn_deck_pack", packName, cx - 100, cy + 70, 200, 40, function()
         GameLogic.currentDeckPackIdx = GameLogic.currentDeckPackIdx + 1
         if GameLogic.currentDeckPackIdx > #GameLogic.deckPacks then
             GameLogic.currentDeckPackIdx = 1
         end
         local newName = GameLogic.deckPacks[GameLogic.currentDeckPackIdx].name
-        UI.setText("btn_deck_pack", "Deck: " .. newName)
+        UI.setText("btn_deck_pack", newName)
         GameLogic.loadCardSprites(GameLogic.currentDeckPackIdx)
     end)
 
-    UI.addButton("btn_start", "Start Game", cx - 100, cy + 80, 200, 50, function()
+    UI.addButton("btn_start", "Start Game", cx - 100, cy + 130, 200, 50, function()
         if Network.roomCode then
             GameLogic.totalRounds = _G.matchRounds
             GameLogic.maxTurnTime = _G.matchTurnTime
@@ -228,7 +226,7 @@ function setupLobbyUI()
             setupGameUI()
         end
     end)
-    UI.addButton("btn_back", "Back", cx - 100, cy + 150, 200, 50, function()
+    UI.addButton("btn_back", "Back", cx - 100, cy + 200, 200, 50, function()
         Network.disconnect()
         appState = "MENU"
         setupMenuUI()
@@ -281,10 +279,11 @@ function setupPauseUI()
     end)
     UI.addButton("btn_full", "Toggle Fullscreen", cx - 100, cy - 20, 200, 50, function()
         love.window.setFullscreen(not love.window.getFullscreen())
-    end)
+        end)
     UI.addButton("btn_leave", "Leave Match", cx - 100, cy + 40, 200, 50, function()
         _G.inPauseMenu = false
         GameLogic.phase = "WAITING"
+        GameLogic.resetGameState() 
         Network.disconnect()
         appState = "MENU"
         setupMenuUI()
@@ -297,6 +296,7 @@ _G.setupMatchOverUI = function()
     UI.addButton("btn_leave_match", "Return to Menu", cx - 100, cy + 120, 200, 50, function()
         _G.inPauseMenu = false
         GameLogic.phase = "WAITING"
+        GameLogic.resetGameState() 
         Network.disconnect()
         appState = "MENU"
         setupMenuUI()
@@ -330,23 +330,6 @@ function love.draw()
     
     -- Scissor out the overflowing bounds dynamically
     love.graphics.setScissor(ox, oy, _G.getW() * scale, _G.getH() * scale)
-    
-    -- -- Background
-    -- if appState == "GAME" then
-        -- -- Felt green background
-        -- love.graphics.clear(0.08, 0.35, 0.20, 1.0)
-        -- -- love.graphics.clear(0.109804, 0.109804, 0.109804, 1)
-        -- GameLogic.draw()
-        
-        -- if _G.inPauseMenu or GameLogic.phase == "MATCH_OVER" then
-            -- love.graphics.setColor(0, 0, 0, 0.7)
-            -- love.graphics.rectangle("fill", 0, 0, _G.getW(), _G.getH())
-        -- end
-    -- else
-        -- love.graphics.clear(0.05, 0.08, 0.12, 1.0)
-    -- end
-    
-    -- In love.load() or initialization section
 
     -- In your draw section
     if appState == "GAME" then
@@ -359,13 +342,6 @@ function love.draw()
             -- Method 1: Draw with alpha blending
             love.graphics.setColor(1, 1, 1, 0.18) -- 50% opacity
             love.graphics.draw(backgroundImage, 0, 0, 0, _G.getW()/backgroundImage:getWidth(), _G.getH()/backgroundImage:getHeight())
-            
-            -- Method 2 (alternative): Use blend modes for different effects
-            -- love.graphics.setBlendMode("multiply", "premultiplied")
-            -- love.graphics.setColor(1, 1, 1, 1)
-            -- love.graphics.draw(backgroundImage, 0, 0, 0, _G.getW()/backgroundImage:getWidth(), _G.getH()/backgroundImage:getHeight())
-            -- love.graphics.setBlendMode("alpha")
-            
             -- Restore color
             love.graphics.setColor(r, g, b, a)
         end

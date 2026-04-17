@@ -80,6 +80,7 @@ end
 
 function GameLogic.startOfflineGame(modeName)
     GameLogic.mode = "OFFLINE"
+    GameLogic.resetGameState()
     GameLogic.loadMode(modeName or "call_bridge")
     GameLogic.initPlayers()
     GameLogic.startRound()
@@ -87,6 +88,7 @@ end
 
 function GameLogic.startOnlineHostGame(modeName)
     GameLogic.mode = "HOST"
+    GameLogic.resetGameState()
     GameLogic.loadMode(modeName or "call_bridge")
     GameLogic.initPlayers()
     -- Sync game start to guests
@@ -118,6 +120,7 @@ function GameLogic.initPlayers()
 end
 
 function GameLogic.startRound()
+    -- Don't reset roundNum here, it's already set correctly
     if GameLogic.activeMode and GameLogic.activeMode.startRound then
         GameLogic.activeMode.startRound()
         return
@@ -129,9 +132,11 @@ function GameLogic.startRound()
     GameLogic.trickLeadSuit = nil
     
     for i=1, 4 do
-        GameLogic.players[i].hand = {}
-        GameLogic.players[i].call = 0
-        GameLogic.players[i].tricksWon = 0
+        if GameLogic.players[i] then
+            GameLogic.players[i].hand = {}
+            GameLogic.players[i].call = 0
+            GameLogic.players[i].tricksWon = 0
+        end
     end
     
     local deck = GameLogic.generateDeck()
@@ -265,7 +270,7 @@ function GameLogic.update(dt)
                 GameLogic.playTurnBot()
             end
         end
-    end  -- <-- This 'end' was missing
+    end  
 
     if GameLogic.phase == "ROUND_OVER" then
         evalTimer = evalTimer + dt
@@ -429,6 +434,31 @@ end
 
 function GameLogic.getState()
     return GameLogic.getStateFor(GameLogic.players[1].id) -- get local host state
+end
+
+function GameLogic.resetGameState()
+    -- Reset round counter
+    GameLogic.roundNum = 1
+    
+    -- Reset other game state variables
+    GameLogic.phase = "WAITING"
+    GameLogic.trick = {}
+    GameLogic.flyingCards = {}
+    GameLogic.trickLeadSuit = nil
+    GameLogic.turnTimer = 0
+    GameLogic.currentPlayer = 1
+    
+    -- Reset player stats if needed
+    if GameLogic.players then
+        for i = 1, #GameLogic.players do
+            if GameLogic.players[i] then
+                GameLogic.players[i].call = 0
+                GameLogic.players[i].tricksWon = 0
+                GameLogic.players[i].score = 0
+                GameLogic.players[i].hand = {}
+            end
+        end
+    end
 end
 
 function GameLogic.handleNetworkMessage(evt)
