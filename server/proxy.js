@@ -3,17 +3,176 @@ require('dotenv').config();
 const http = require('http');
 const WebSocket = require('ws');
 const { URL } = require('url');
+const fs = require('fs');
+const path = require('path');
 
+// ========== LOGGING SYSTEM ==========
+const colors = {
+    reset: '\x1b[0m',
+    bright: '\x1b[1m',
+    dim: '\x1b[2m',
+    underscore: '\x1b[4m',
+    blink: '\x1b[5m',
+    reverse: '\x1b[7m',
+    hidden: '\x1b[8m',
+    
+    fg: {
+        black: '\x1b[30m',
+        red: '\x1b[31m',
+        green: '\x1b[32m',
+        yellow: '\x1b[33m',
+        blue: '\x1b[34m',
+        magenta: '\x1b[35m',
+        cyan: '\x1b[36m',
+        white: '\x1b[37m',
+        gray: '\x1b[90m',
+        crimson: '\x1b[38m'
+    },
+    bg: {
+        black: '\x1b[40m',
+        red: '\x1b[41m',
+        green: '\x1b[42m',
+        yellow: '\x1b[43m',
+        blue: '\x1b[44m',
+        magenta: '\x1b[45m',
+        cyan: '\x1b[46m',
+        white: '\x1b[47m'
+    }
+};
+
+const LOG_LEVELS = {
+    ERROR: 0,
+    WARN: 1,
+    INFO: 2,
+    DEBUG: 3
+};
+
+const LOG_CONFIG = {
+    level: LOG_LEVELS[process.env.LOG_LEVEL?.toUpperCase() || 'INFO'] || LOG_LEVELS.INFO,
+    enableColors: process.env.LOG_COLORS !== 'false',
+    enableFile: process.env.LOG_FILE === 'true',
+    logPath: process.env.LOG_PATH || path.join(process.cwd(), 'logs'),
+    consoleCompact: process.env.LOG_CONSOLE_COMPACT !== 'false'
+};
+
+// Create log directory if file logging is enabled
+if (LOG_CONFIG.enableFile && !fs.existsSync(LOG_CONFIG.logPath)) {
+    fs.mkdirSync(LOG_CONFIG.logPath, { recursive: true });
+}
+
+function getTimestamp() {
+    const now = new Date();
+    return now.toISOString().replace('T', ' ').substring(0, 19);
+}
+
+function getShortTimestamp() {
+    const now = new Date();
+    return now.toLocaleTimeString('en-US', { hour12: false });
+}
+
+function colorize(text, color) {
+    if (!LOG_CONFIG.enableColors) return text;
+    return `${color}${text}${colors.reset}`;
+}
+
+function getLevelColor(level) {
+    switch(level) {
+        case 'ERROR': return colors.fg.red;
+        case 'WARN': return colors.fg.yellow;
+        case 'INFO': return colors.fg.green;
+        case 'DEBUG': return colors.fg.cyan;
+        default: return colors.fg.white;
+    }
+}
+
+function getLevelBgColor(level) {
+    switch(level) {
+        case 'ERROR': return colors.bg.red;
+        case 'WARN': return colors.bg.yellow;
+        case 'INFO': return colors.bg.green;
+        case 'DEBUG': return colors.bg.cyan;
+        default: return colors.bg.white;
+    }
+}
+
+function writeToFile(level, message, fullMessage) {
+    if (!LOG_CONFIG.enableFile) return;
+    
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const logFile = path.join(LOG_CONFIG.logPath, `proxy-${year}-${month}-${day}.log`);
+    
+    const logEntry = `[${getTimestamp()}] [${level}] ${fullMessage}\n`;
+    fs.appendFileSync(logFile, logEntry, 'utf8');
+}
+
+function log(level, message, ...args) {
+    const levelValue = LOG_LEVELS[level];
+    if (levelValue > LOG_CONFIG.level) return;
+    
+    const timestamp = LOG_CONFIG.consoleCompact ? getShortTimestamp() : getTimestamp();
+    const levelColor = getLevelColor(level);
+    const coloredLevel = colorize(level.padEnd(5), levelColor);
+    
+    let formattedMessage = message;
+    if (args.length > 0) {
+        formattedMessage = message.replace(/{}/g, () => {
+            const arg = args.shift();
+            return typeof arg === 'object' ? JSON.stringify(arg) : arg;
+        });
+        if (args.length > 0) {
+            formattedMessage += ' ' + args.map(a => typeof a === 'object' ? JSON.stringify(a) : a).join(' ');
+        }
+    }
+    
+    const consoleMessage = LOG_CONFIG.consoleCompact 
+        ? `${coloredLevel} ${timestamp} ${formattedMessage}`
+        : `${coloredLevel} [${timestamp}] ${formattedMessage}`;
+    
+    console.log(consoleMessage);
+    writeToFile(level, formattedMessage, `[${timestamp}] ${formattedMessage}`);
+}
+
+// Create logger object
+const logger = {
+    error: (msg, ...args) => log('ERROR', msg, ...args),
+    warn: (msg, ...args) => log('WARN', msg, ...args),
+    info: (msg, ...args) => log('INFO', msg, ...args),
+    debug: (msg, ...args) => log('DEBUG', msg, ...args),
+    
+    // Special formatted logs
+    connection: (id, direction, status, details = '') => {
+        const statusColor = status === 'connected' ? colors.fg.green : colors.fg.red;
+        const statusSymbol = status === 'connected' ? '▲' : '▼';
+        logger.info(`${colorize(statusSymbol, statusColor)} ${direction.padEnd(7)} ${colorize(id, colors.fg.cyan)} ${status}${details ? ' ' + details : ''}`);
+    },
+    
+    proxy: (from, to, type, id, data = '') => {
+        const typeColor = type === 'msg' ? colors.fg.magenta : colors.fg.blue;
+        const arrow = colorize('→', colors.fg.gray);
+        logger.debug(`${colorize(from.padEnd(6), colors.fg.gray)} ${arrow} ${colorize(to.padEnd(6), colors.fg.gray)} ${colorize(type, typeColor)} ${colorize(id, colors.fg.cyan)}${data ? ' ' + data.substring(0, 50) : ''}`);
+    },
+    
+    divider: (char = '=', length = 50) => {
+        if (!LOG_CONFIG.consoleCompact) {
+            console.log(colorize(char.repeat(length), colors.fg.gray));
+        }
+    }
+};
+
+// ========== PROXY SERVER ==========
 const LOCAL_PORT = process.env.LOCAL_PORT || 8080;
 const REMOTE_URL = process.env.REMOTE_URL;
 
 if (!REMOTE_URL) {
-  console.error('Error: REMOTE_URL environment variable is required');
-  process.exit(1);
+    logger.error('REMOTE_URL environment variable is required');
+    process.exit(1);
 }
 
 // Store local clients and their mappings to remote connections
-const localClients = new Map(); // localClientId -> { localSocket, remoteSocket, roomId, hostId }
+const localClients = new Map();
 let nextLocalId = 1;
 
 function createLocalId() {
@@ -22,8 +181,6 @@ function createLocalId() {
 
 // Create HTTP server for status page and WebSocket upgrade
 const server = http.createServer((req, res) => {
-    console.log(`${req.method} ${req.url}`);
-    
     if (req.method === 'GET' && req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'text/html' });
         res.write(`<!DOCTYPE html>
@@ -82,7 +239,7 @@ const wss = new WebSocket.Server({ server });
 
 wss.on('connection', (localSocket, req) => {
     const localClientId = createLocalId();
-    console.log(`[LOCAL] New client connected: ${localClientId}`);
+    logger.connection(localClientId, 'LOCAL', 'connected', `from ${req.socket.remoteAddress}`);
     
     const clientState = {
         localSocket,
@@ -94,29 +251,29 @@ wss.on('connection', (localSocket, req) => {
     
     localClients.set(localClientId, clientState);
     
-    console.log(`[REMOTE] Connecting to remote server for ${localClientId}...`);
+    logger.debug(`Connecting to remote server for {}`, localClientId);
     
     let remoteSocket;
     try {
         remoteSocket = new WebSocket(REMOTE_URL);
         clientState.remoteSocket = remoteSocket;
     } catch (e) {
-        console.error(`[REMOTE] Failed to create connection for ${localClientId}:`, e);
+        logger.error(`Failed to create remote connection for {}: {}`, localClientId, e.message);
         localSocket.close(1011, "Internal Error");
         localClients.delete(localClientId);
         return;
     }
     
     remoteSocket.on('open', () => {
-        console.log(`[REMOTE] Connected for client ${localClientId}`);
+        logger.connection(localClientId, 'REMOTE', 'connected');
         
-        // Send any queued messages that were received while connecting
         while (clientState.messageQueue.length > 0) {
             const msgData = clientState.messageQueue.shift();
             try {
                 remoteSocket.send(msgData);
+                logger.proxy('QUEUE', 'REMOTE', 'flush', localClientId);
             } catch(e) {
-                console.error(`[REMOTE] Error sending queued message for ${localClientId}:`, e);
+                logger.error(`Error sending queued message: {}`, e.message);
             }
         }
     });
@@ -125,24 +282,26 @@ wss.on('connection', (localSocket, req) => {
         try {
             const dataStr = data.toString();
             const msg = JSON.parse(dataStr);
-            console.log(`[PROXY] Remote -> Local (${localClientId}):`, dataStr);
+            logger.proxy('REMOTE', 'LOCAL', msg.type || 'MSG', localClientId, dataStr.substring(0, 100));
             
-            // Track room state from remote responses
             if (msg.type === 'ROOM_CREATED') {
                 clientState.roomId = msg.code;
                 clientState.hostId = localClientId;
+                logger.info(`Room created: {} (host: {})`, msg.code, localClientId);
             } else if (msg.type === 'JOIN_SUCCESS') {
                 clientState.roomId = msg.code;
+                logger.info(`Joined room: {} (client: {})`, msg.code, localClientId);
             } else if (msg.type === 'ROOM_CLOSED') {
                 clientState.roomId = null;
                 clientState.hostId = null;
+                logger.warn(`Room closed for client {}`, localClientId);
             }
             
             if (localSocket.readyState === WebSocket.OPEN) {
                 localSocket.send(dataStr);
             }
         } catch (e) {
-            console.error('[PROXY] Error parsing remote message:', e);
+            logger.debug(`Forwarding raw message REMOTE → LOCAL`, localClientId);
             if (localSocket.readyState === WebSocket.OPEN) {
                 localSocket.send(data.toString());
             }
@@ -150,10 +309,9 @@ wss.on('connection', (localSocket, req) => {
     });
     
     remoteSocket.on('close', (code, reason) => {
-        console.log(`[REMOTE] Disconnected for client ${localClientId} - code: ${code}, reason: ${reason}`);
+        logger.connection(localClientId, 'REMOTE', 'disconnected', `code:${code} reason:${reason || 'none'}`);
         
         if (localSocket.readyState === WebSocket.OPEN) {
-            // Forward a graceful disconnect message first
             try {
                 localSocket.send(JSON.stringify({
                     type: 'ERROR',
@@ -167,7 +325,7 @@ wss.on('connection', (localSocket, req) => {
     });
     
     remoteSocket.on('error', (err) => {
-        console.error(`[REMOTE] Error for client ${localClientId}:`, err.message);
+        logger.error(`Remote socket error for {}: {}`, localClientId, err.message);
     });
     
     localSocket.on('message', (data) => {
@@ -175,26 +333,26 @@ wss.on('connection', (localSocket, req) => {
             const dataStr = data.toString();
             try {
                 const msg = JSON.parse(dataStr);
-                console.log(`[PROXY] Local -> Remote (${localClientId}):`, dataStr);
+                logger.proxy('LOCAL', 'REMOTE', msg.type || 'MSG', localClientId, dataStr.substring(0, 100));
             } catch (e) {
-                console.log(`[PROXY] Local -> Remote (${localClientId}): [Invalid JSON] ${dataStr}`);
+                logger.proxy('LOCAL', 'REMOTE', 'RAW', localClientId, dataStr.substring(0, 100));
             }
             
             if (remoteSocket.readyState === WebSocket.OPEN) {
                 remoteSocket.send(dataStr);
             } else if (remoteSocket.readyState === WebSocket.CONNECTING) {
-                console.log(`[PROXY] Queuing message for remote...`);
+                logger.debug(`Queuing message for remote (state: CONNECTING)`, localClientId);
                 clientState.messageQueue.push(dataStr);
             } else {
-                console.log(`[PROXY] Dropping message - remote not connected`);
+                logger.warn(`Dropping message - remote not connected (state: {})`, remoteSocket.readyState);
             }
         } catch (e) {
-            console.error('[PROXY] Error handling local message:', e);
+            logger.error(`Error handling local message: {}`, e.message);
         }
     });
     
     localSocket.on('close', (code, reason) => {
-        console.log(`[LOCAL] Client disconnected: ${localClientId}`);
+        logger.connection(localClientId, 'LOCAL', 'disconnected', `code:${code}`);
         if (remoteSocket && (remoteSocket.readyState === WebSocket.OPEN || remoteSocket.readyState === WebSocket.CONNECTING)) {
             remoteSocket.close(1000, "Local client disconnected");
         }
@@ -202,31 +360,34 @@ wss.on('connection', (localSocket, req) => {
     });
     
     localSocket.on('error', (err) => {
-        console.error(`[LOCAL] Socket error for ${localClientId}:`, err.message);
+        logger.error(`Local socket error for {}: {}`, localClientId, err.message);
     });
 });
 
 // Start the proxy server
 server.listen(LOCAL_PORT, '0.0.0.0', () => {
-    console.log('=' .repeat(60));
-    console.log('DevilBridge Local Proxy Server');
-    console.log('=' .repeat(60));
-    console.log(`Local WebSocket endpoint: ws://0.0.0.0:${LOCAL_PORT}`);
-    console.log(`Local HTTP endpoint: http://0.0.0.0:${LOCAL_PORT}`);
-    console.log(`Remote server: ${REMOTE_URL}`);
-    console.log('=' .repeat(60));
-    console.log('\nProxy is running! Connect your game client to:');
-    console.log(`   ws://localhost:${LOCAL_PORT}`);
-    console.log('\nStatus page available at:');
-    console.log(`   http://localhost:${LOCAL_PORT}`);
-    console.log('=' .repeat(60));
+    console.log('\n' + colorize('═'.repeat(60), colors.fg.cyan));
+    console.log(colorize('  DevilBridge Local Proxy Server', colors.bright + colors.fg.green));
+    console.log(colorize('═'.repeat(60), colors.fg.cyan));
+    console.log(`  ${colorize('Local WS:', colors.fg.yellow)}  ws://0.0.0.0:${LOCAL_PORT}`);
+    console.log(`  ${colorize('Local HTTP:', colors.fg.yellow)} http://0.0.0.0:${LOCAL_PORT}`);
+    console.log(`  ${colorize('Remote:', colors.fg.yellow)}     ${REMOTE_URL}`);
+    console.log(`  ${colorize('Log Level:', colors.fg.yellow)}  ${Object.keys(LOG_LEVELS).find(k => LOG_LEVELS[k] === LOG_CONFIG.level) || 'INFO'}`);
+    console.log(`  ${colorize('File Logging:', colors.fg.yellow)} ${LOG_CONFIG.enableFile ? colorize('ENABLED', colors.fg.green) : colorize('DISABLED', colors.fg.gray)}`);
+    if (LOG_CONFIG.enableFile) {
+        console.log(`  ${colorize('Log Path:', colors.fg.yellow)}     ${LOG_CONFIG.logPath}`);
+    }
+    console.log(colorize('═'.repeat(60), colors.fg.cyan));
+    console.log(`\n  ${colorize('OK', colors.fg.green)} Proxy running! Connect your game client to:`);
+    console.log(`   ${colorize(`ws://localhost:${LOCAL_PORT}`, colors.bright + colors.fg.cyan)}`);
+    console.log(`  ${colorize('i', colors.fg.blue)} Status page: ${colorize(`http://localhost:${LOCAL_PORT}`, colors.fg.cyan)}`);
+    console.log(colorize('═'.repeat(60), colors.fg.cyan) + '\n');
 });
 
 // Handle process termination
 process.on('SIGINT', () => {
-    console.log('\nShutting down proxy...');
+    logger.info('\nShutting down proxy...');
     
-    // Close all connections
     for (const [id, data] of localClients) {
         if (data.remoteSocket && data.remoteSocket.readyState === WebSocket.OPEN) {
             data.remoteSocket.close();
@@ -237,7 +398,7 @@ process.on('SIGINT', () => {
     }
     
     server.close(() => {
-        console.log('Proxy stopped.');
+        logger.info('Proxy stopped.');
         process.exit(0);
     });
 });

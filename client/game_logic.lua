@@ -576,21 +576,52 @@ function GameLogic.draw()
     local fontH = font:getHeight()
 
     if GameLogic.phase == "MATCH_OVER" then
+    
+        love.graphics.setColor(0, 0, 0, 0.7)
+        love.graphics.rectangle("fill", 0, 0, _G.getW(), _G.getH())
+    
         -- Professional Match Over Overlay
-        love.graphics.setColor(0.05, 0.05, 0.1, 0.8)
-        love.graphics.rectangle("fill", cx - 250, cy - 200, 500, 400, 16)
-
-        GameLogic.drawText("MATCH OVER - FINAL SCORES", 0, cy - 150, W, "center", {1, 0.85, 0.3, 1})
-
+        love.graphics.setColor(0.05, 0.05, 0.1, 0.85)
+        love.graphics.rectangle("fill", cx - 280, cy - 220, 560, 440, 16)
+        -- "MATCH OVER" - Large font (temporary size change)
+        local defaultFont = love.graphics.getFont()
+        local largeFont = love.graphics.newFont(36) -- Adjust size as needed
+        love.graphics.setFont(largeFont)
+        love.graphics.setColor(1, 0.9, 0.2, 1)
+        love.graphics.printf("MATCH OVER", 0, cy - 160, W, "center")
+        
+        -- "FINAL SCORES" - Smaller font
+        local mediumFont = love.graphics.newFont(20)
+        love.graphics.setFont(mediumFont)
+        love.graphics.setColor(0.7, 0.7, 0.8, 0.9)
+        love.graphics.printf("FINAL SCORES", 0, cy - 110, W, "center")
+        
+        -- Restore default font
+        love.graphics.setFont(defaultFont)
+        -- Divider line
+        love.graphics.setColor(1, 1, 1, 0.15)
+        love.graphics.line(cx - 200, cy - 60, cx + 200, cy - 60)
+        
         local sorted = {}
         for i = 1, 4 do table.insert(sorted, GameLogic.players[i]) end
         table.sort(sorted, function(a, b) return a.score > b.score end)
-
+        
+        -- Player scores with proper spacing
         for i, p in ipairs(sorted) do
-            local pColor = (p.id == GameLogic.players[GameLogic.myPlayerIdx].id) and {0.3, 0.95, 0.4, 1} or {1, 1, 1, 1}
-            GameLogic.drawText(i .. ". " .. p.name .. " - Score: " .. string.format("%.1f", p.score),
-                           0, cy - 70 + (i * 45), W, "center", pColor)
+            local isLocalPlayer = (p.id == GameLogic.players[GameLogic.myPlayerIdx].id)
+            local pColor = isLocalPlayer and {0.35, 0.95, 0.45, 1} or {0.95, 0.95, 0.95, 0.9}
+            -- GameLogic.drawText(i .. ".", cx - 220, cy - 65 + (i * 45), 40, "right", {0.8, 0.8, 0.8, 0.7}, 1.2)
+            local nameColor = isLocalPlayer and pColor or {0.9, 0.9, 0.9, 0.85}
+            GameLogic.drawText(i .. ". " .. p.name, cx - 200, cy - 65 + (i * 45), 200, "left", nameColor, 1.1)
+            GameLogic.drawText(string.format("%.1f", p.score), cx + 120, cy - 65 + (i * 45), 80, "right", pColor, 1.2)
+            
+            -- Highlight background for local player
+            if isLocalPlayer then
+                love.graphics.setColor(0.35, 0.95, 0.45, 0.08)
+                love.graphics.rectangle("fill", cx - 210, cy - 75 + (i * 45), 420, 38, 8)
+            end
         end
+        
         return
     end
 

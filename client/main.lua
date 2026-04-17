@@ -293,7 +293,7 @@ end
 _G.setupMatchOverUI = function()
     UI.clear()
     local cx, cy = _G.getW() / 2, _G.getH() / 2
-    UI.addButton("btn_leave_match", "Return to Menu", cx - 100, cy + 120, 200, 50, function()
+    UI.addButton("btn_leave_match", "Return to Menu", cx - 100, cy + 240, 200, 50, function()
         _G.inPauseMenu = false
         GameLogic.phase = "WAITING"
         GameLogic.resetGameState() 
@@ -316,8 +316,8 @@ function love.update(dt)
             GameLogic.update(dt)
         end
         if GameLogic.phase == "MATCH_OVER" and not UI.getText("btn_leave_match") then
-            -- Trigger UI creation once
             _G.setupMatchOverUI()
+            -- Trigger UI creation once
         end
     end
 end
@@ -348,7 +348,7 @@ function love.draw()
         
         GameLogic.draw()
         
-        if _G.inPauseMenu or GameLogic.phase == "MATCH_OVER" then
+        if _G.inPauseMenu then
             love.graphics.setColor(0, 0, 0, 0.7)
             love.graphics.rectangle("fill", 0, 0, _G.getW(), _G.getH())
         end
