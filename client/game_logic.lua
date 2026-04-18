@@ -611,16 +611,23 @@ function GameLogic.draw()
         
         local sorted = {}
         for i = 1, 4 do table.insert(sorted, GameLogic.players[i]) end
-        table.sort(sorted, function(a, b) return a.score > b.score end)
+        table.sort(sorted, function(a, b) 
+            local useChips = (GameLogic.currentModeName == "poker" or GameLogic.currentModeName == "black_jack")
+            local scoreA = useChips and (a.chips or 0) or a.score
+            local scoreB = useChips and (b.chips or 0) or b.score
+            return scoreA > scoreB 
+        end)
         
         -- Player scores with proper spacing
         for i, p in ipairs(sorted) do
             local isLocalPlayer = (p.id == GameLogic.players[GameLogic.myPlayerIdx].id)
             local pColor = isLocalPlayer and {0.35, 0.95, 0.45, 1} or {0.95, 0.95, 0.95, 0.9}
-            -- GameLogic.drawText(i .. ".", cx - 220, cy - 65 + (i * 45), 40, "right", {0.8, 0.8, 0.8, 0.7}, 1.2)
+            
             local nameColor = isLocalPlayer and pColor or {0.9, 0.9, 0.9, 0.85}
             GameLogic.drawText(i .. ". " .. p.name, cx - 200, cy - 65 + (i * 45), 200, "left", nameColor, 1.1)
-            GameLogic.drawText(string.format("%.1f", p.score), cx + 120, cy - 65 + (i * 45), 80, "right", pColor, 1.2)
+            
+            local scoreVal = (GameLogic.currentModeName == "poker" or GameLogic.currentModeName == "black_jack") and ("$" .. tostring(math.floor(p.chips or 0))) or string.format("%.1f", p.score)
+            GameLogic.drawText(scoreVal, cx + 120, cy - 65 + (i * 45), 80, "right", pColor, 1.2)
             
             -- Highlight background for local player
             if isLocalPlayer then

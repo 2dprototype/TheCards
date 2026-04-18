@@ -48,18 +48,49 @@ function Poker.startRound()
         end
     end
     
+    -- If 1 or 0 players have chips, match is over!
+    local activePlayersStart = 0
+    for i=1, 4 do if GameLogic.players[i].chips > 0 then activePlayersStart = activePlayersStart + 1 end end
+    
+    if activePlayersStart <= 1 then
+        GameLogic.phase = "MATCH_OVER"
+        GameLogic.syncState()
+        return
+    end
+
     -- Blinds
     Poker.dealerIdx = (GameLogic.roundNum % 4) + 1
-    local sbIdx = (Poker.dealerIdx % 4) + 1
-    local bbIdx = (sbIdx % 4) + 1
+    local loops = 0
+    while GameLogic.players[Poker.dealerIdx].chips <= 0 and loops < 4 do
+        Poker.dealerIdx = (Poker.dealerIdx % 4) + 1
+        loops = loops + 1
+    end
     
-    -- Deduct blinds
-    GameLogic.players[sbIdx].chips = GameLogic.players[sbIdx].chips - 10
-    GameLogic.players[sbIdx].currentBet = 10
-    GameLogic.players[bbIdx].chips = GameLogic.players[bbIdx].chips - 20
-    GameLogic.players[bbIdx].currentBet = 20
-    Poker.pot = 30
-    Poker.currentBetToMatch = 20
+    local sbIdx = (Poker.dealerIdx % 4) + 1
+    loops = 0
+    while GameLogic.players[sbIdx].chips <= 0 and loops < 4 do
+        sbIdx = (sbIdx % 4) + 1
+        loops = loops + 1
+    end
+    
+    local bbIdx = (sbIdx % 4) + 1
+    loops = 0
+    while GameLogic.players[bbIdx].chips <= 0 and loops < 4 do
+        bbIdx = (bbIdx % 4) + 1
+        loops = loops + 1
+    end
+    
+    -- Deduct blinds gracefully (prevent negative)
+    local sbAmount = math.min(10, GameLogic.players[sbIdx].chips)
+    GameLogic.players[sbIdx].chips = GameLogic.players[sbIdx].chips - sbAmount
+    GameLogic.players[sbIdx].currentBet = sbAmount
+    
+    local bbAmount = math.min(20, GameLogic.players[bbIdx].chips)
+    GameLogic.players[bbIdx].chips = GameLogic.players[bbIdx].chips - bbAmount
+    GameLogic.players[bbIdx].currentBet = bbAmount
+    
+    Poker.pot = sbAmount + bbAmount
+    Poker.currentBetToMatch = math.max(sbAmount, bbAmount)
     
     GameLogic.phase = "BETTING_PREFLOP"
     GameLogic.currentPlayer = (bbIdx % 4) + 1
@@ -94,16 +125,20 @@ end
 
 function Poker.advanceTurn()
     local activePlayers = 0
+    local bettingPlayers = 0
     local allMatched = true
     local lastActive = 1
     
     for i=1, 4 do
         local p = GameLogic.players[i]
-        if not p.folded then
+        if not p.folded and p.chips ~= nil then
             activePlayers = activePlayers + 1
             lastActive = i
-            if p.currentBet < Poker.currentBetToMatch and p.chips > 0 then
-                allMatched = false
+            if p.chips > 0 then
+                bettingPlayers = bettingPlayers + 1
+                if p.currentBet < Poker.currentBetToMatch then
+                    allMatched = false
+                end
             end
         end
     end
@@ -111,6 +146,11 @@ function Poker.advanceTurn()
     if activePlayers == 1 then
         Poker.awardPot(lastActive)
         return
+    end
+
+    -- If 0 or 1 players can still bet (others are all-in), we automatically advance phases if matching is done
+    if bettingPlayers <= 1 and allMatched then
+        Poker.playersActedThisRound = 99 -- force phase advance
     end
     
     if allMatched and Poker.playersActedThisRound >= activePlayers then
@@ -147,14 +187,16 @@ function Poker.advanceTurn()
             GameLogic.phase = "SHOWDOWN"
             Poker.evaluateShowdown()
         end
-        -- skip folded players
-        while GameLogic.players[GameLogic.currentPlayer].folded do
+        -- skip folded or all-in players
+        local safeLoops = 0
+        while (GameLogic.players[GameLogic.currentPlayer].folded or GameLogic.players[GameLogic.currentPlayer].chips <= 0) and safeLoops < 4 do
             GameLogic.currentPlayer = (GameLogic.currentPlayer % 4) + 1
+            safeLoops = safeLoops + 1
         end
     else
         local originalPlayer = GameLogic.currentPlayer
         GameLogic.currentPlayer = (GameLogic.currentPlayer % 4) + 1
-        while GameLogic.players[GameLogic.currentPlayer].folded or (GameLogic.players[GameLogic.currentPlayer].chips == 0) do
+        while GameLogic.players[GameLogic.currentPlayer].folded or (GameLogic.players[GameLogic.currentPlayer].chips <= 0) do
             GameLogic.currentPlayer = (GameLogic.currentPlayer % 4) + 1
             if GameLogic.currentPlayer == originalPlayer then break end
         end
@@ -293,9 +335,11 @@ function Poker.evaluateShowdown()
         end
     end
     
-    local winSplit = math.floor(Poker.pot / #winners)
-    for _, wIdx in ipairs(winners) do
-        GameLogic.players[wIdx].chips = GameLogic.players[wIdx].chips + winSplit
+    if #winners > 0 then
+        local winSplit = math.floor(Poker.pot / #winners)
+        for _, wIdx in ipairs(winners) do
+            GameLogic.players[wIdx].chips = GameLogic.players[wIdx].chips + winSplit
+        end
     end
     Poker.pot = 0
     GameLogic.phase = "ROUND_OVER"
@@ -354,7 +398,6 @@ function Poker.update(dt)
 end
 
 local chipColors = {
-    {val=500, col={0.5, 0.1, 0.5, 1}},  -- Deep Purple
     {val=100, col={0.15, 0.15, 0.15, 1}},-- Black
     {val=25, col={0.1, 0.6, 0.2, 1}},   -- Casino Green
     {val=5, col={0.8, 0.15, 0.15, 1}},  -- Red
@@ -403,8 +446,8 @@ local function drawChipStack(amount, x, y, spreadRight)
             zOffset = zOffset + 3
             chipsInStack = chipsInStack + 1
             
-            -- Build stacks 10 high before spreading out
-            if chipsInStack >= 10 then 
+            -- Build stacks 6 high before spreading out to make money look more substantial
+            if chipsInStack >= 6 then 
                 hOffset = hOffset + (spreadRight and 26 or -26)
                 zOffset = 0
                 chipsInStack = 0
@@ -457,14 +500,14 @@ function Poker.drawScoreboard(cx, cy, W, H)
 end
 
 function Poker.drawCallingUI(cx, cy, W, H)
-    -- Draw Action Buttons fixed to the BOTTOM CENTER of the screen
+    -- Draw Action Buttons safely above local hand
     if string.match(GameLogic.phase, "BETTING") and GameLogic.currentPlayer == GameLogic.myPlayerIdx and not GameLogic.players[GameLogic.myPlayerIdx].isBot then
         local btnWidth = 100
         local btnHeight = 40
         local gap = 20
         -- Total width = (100*3) + (20*2) = 340. Half is 170.
         local startX = cx - 170 
-        local startY = H - 80 -- Anchored to bottom
+        local startY = H - 180 -- Safely above bottom player's hand
         
         local p = GameLogic.players[GameLogic.myPlayerIdx]
         local toCall = Poker.currentBetToMatch - p.currentBet
@@ -505,11 +548,18 @@ function Poker.drawCallingUI(cx, cy, W, H)
         
         -- 1. Draw Total Bankroll (Available Money Stacks)
         if (p.visChips or 0) >= 1 then
-            -- Place to the right by default, but flip to the left if player is on the right side of the screen
-            local isRightSide = px > cx
-            local bankX = isRightSide and (px - 90) or (px + 90)
-            local bankY = py + 15
-            drawChipStack(p.visChips, bankX, bankY, not isRightSide)
+            local bankX, bankY
+            if i == GameLogic.myPlayerIdx then
+                -- Place local player bankroll completely to the left
+                bankX = 120
+                bankY = H - 60
+            else
+                local isRightSide = px > cx
+                bankX = isRightSide and (px - 100) or (px + 100)
+                bankY = py + 15
+            end
+            
+            drawChipStack(p.visChips, bankX, bankY, not (px > cx))
             
             -- Optional label under the bankroll stack
             GameLogic.drawText("$"..math.floor(p.visChips), bankX - 30, bankY + 10, 60, "center", {0.8, 0.8, 0.8, 1})
@@ -518,8 +568,12 @@ function Poker.drawCallingUI(cx, cy, W, H)
         -- 2. Draw Active Bets
         local betX, betY = px, py
         if dist > 0 then
-            betX = px + (dirX/dist) * 110 -- Push inward by 110px
-            betY = py + (dirY/dist) * 110
+            betX = px + (dirX/dist) * 90 -- Push inward safely
+            betY = py + (dirY/dist) * 90
+        end
+        if i == GameLogic.myPlayerIdx then
+            -- Push local bet far enough up to avoid hand collision
+            betY = betY - 80
         end
         
         if (p.visBet or 0) >= 1 then
@@ -556,7 +610,7 @@ function Poker.mousepressed(x, y, button)
         local btnHeight = 40
         local gap = 20
         local startX = cx - 170
-        local startY = H - 80 -- Updated to match the new bottom-anchored drawing
+        local startY = H - 180 -- Updated to match the new drawing Y
         
         if x >= startX and x <= startX + btnWidth and y >= startY and y <= startY + btnHeight then
             -- FOLD

@@ -18,6 +18,15 @@ function BlackJack.startRound()
             GameLogic.players[i].chips = 1000
         end
     end
+
+    local activePlayersStart = 0
+    for i=1, 4 do if GameLogic.players[i].chips > 0 then activePlayersStart = activePlayersStart + 1 end end
+    
+    if activePlayersStart == 0 then
+        GameLogic.phase = "MATCH_OVER"
+        GameLogic.syncState()
+        return
+    end
     
     BlackJack.dealerHand = {}
     BlackJack.dealerStood = false
@@ -37,11 +46,15 @@ end
 
 function BlackJack.dealInitialCards()
     for i=1, 4 do
-        table.insert(GameLogic.players[i].hand, table.remove(BlackJack.deck))
-        table.insert(GameLogic.players[i].hand, table.remove(BlackJack.deck))
-        -- setup vis
-        for j, c in ipairs(GameLogic.players[i].hand) do
-            c.visX, c.visY = GameLogic.getPlayerAnchor(i)
+        if GameLogic.players[i].currentBet > 0 then
+            table.insert(GameLogic.players[i].hand, table.remove(BlackJack.deck))
+            table.insert(GameLogic.players[i].hand, table.remove(BlackJack.deck))
+            -- setup vis
+            for j, c in ipairs(GameLogic.players[i].hand) do
+                c.visX, c.visY = GameLogic.getPlayerAnchor(i)
+            end
+        else
+            GameLogic.players[i].isStood = true -- auto stand if no bet
         end
     end
     table.insert(BlackJack.dealerHand, table.remove(BlackJack.deck))
@@ -77,14 +90,20 @@ function BlackJack.handleAction(playerIdx, action, betAmount)
     
     if GameLogic.phase == "BETTING" then
         if action == "BET" then
-            if p.chips >= betAmount then
-                p.chips = p.chips - betAmount
-                p.currentBet = p.currentBet + betAmount
+            local toBet = math.min(betAmount, p.chips)
+            if toBet > 0 then
+                p.chips = p.chips - toBet
+                p.currentBet = p.currentBet + toBet
             end
         end
-        -- If all have bet > 0, start dealing
+        -- If all have bet > 0 (or have 0 chips), start dealing
         local allBet = true
-        for i=1, 4 do if GameLogic.players[i].currentBet == 0 then allBet = false end end
+        for i=1, 4 do 
+            local pCheck = GameLogic.players[i]
+            if pCheck.currentBet == 0 and pCheck.chips > 0 then 
+                allBet = false 
+            end 
+        end
         if allBet then
             BlackJack.dealInitialCards()
             GameLogic.syncState()
@@ -107,21 +126,31 @@ function BlackJack.handleAction(playerIdx, action, betAmount)
 end
 
 function BlackJack.advanceTurnIfFixed()
+    if GameLogic.currentPlayer > 4 then
+        GameLogic.currentPlayer = 1
+        GameLogic.phase = "DEALER_TURN"
+        return
+    end
+
     local p = GameLogic.players[GameLogic.currentPlayer]
-    if p.isStood or p.isBusted then
+    if p.isStood or p.isBusted or p.currentBet == 0 then
         GameLogic.currentPlayer = GameLogic.currentPlayer + 1
-        if GameLogic.currentPlayer > 4 then
-            GameLogic.phase = "DEALER_TURN"
-        end
         BlackJack.advanceTurnIfFixed() -- recursive forward
+    else
+        GameLogic.turnTimer = GameLogic.maxTurnTime or 15
     end
 end
 
 function BlackJack.playTurnBot()
-    local p = GameLogic.players[GameLogic.currentPlayer]
     if GameLogic.phase == "BETTING" then
-        BlackJack.handleAction(GameLogic.currentPlayer, "BET", 50)
+        for i=1, 4 do
+            if GameLogic.players[i].isBot and GameLogic.players[i].currentBet == 0 and GameLogic.players[i].chips > 0 then
+                BlackJack.handleAction(i, "BET", 50)
+                return
+            end
+        end
     elseif GameLogic.phase == "PLAYER_TURNS" then
+        local p = GameLogic.players[GameLogic.currentPlayer]
         local val = BlackJack.getValue(p.hand)
         if val < 17 then
             BlackJack.handleAction(GameLogic.currentPlayer, "HIT")
@@ -132,11 +161,43 @@ function BlackJack.playTurnBot()
 end
 
 function BlackJack.isBotTurn()
+    if GameLogic.phase == "BETTING" then
+        for i=1, 4 do
+            if GameLogic.players[i].isBot and GameLogic.players[i].currentBet == 0 and GameLogic.players[i].chips > 0 then
+                return true
+            end
+        end
+        return false
+    end
     return GameLogic.players[GameLogic.currentPlayer].isBot
 end
 
 local evalTimer = 0
 function BlackJack.update(dt)
+    -- Animate other players' hands physically (since GameLogic only animates local)
+    local cx, cy = _G.getW() / 2, _G.getH() / 2
+    for i=1, 4 do
+        if i ~= GameLogic.myPlayerIdx then
+            local p = GameLogic.players[i]
+            if p.hand and #p.hand > 0 then
+                local px, py = GameLogic.getPlayerAnchor(i)
+                local dirX, dirY = cx - px, cy - py
+                local dist = math.sqrt(dirX^2 + dirY^2)
+                local targetXBase = px + (dirX/dist)*130
+                local targetYBase = py + (dirY/dist)*130
+                
+                local startX = targetXBase - (#p.hand * 30)/2
+                for j, c in ipairs(p.hand) do
+                    local targetX = startX + (j-1)*30
+                    local targetY = targetYBase
+                    if not c.visX then c.visX, c.visY = px, py end
+                    c.visX = c.visX + (targetX - c.visX) * dt * 8
+                    c.visY = c.visY + (targetY - c.visY) * dt * 8
+                end
+            end
+        end
+    end
+
     if GameLogic.phase == "DEALER_TURN" then
         evalTimer = evalTimer + dt
         if evalTimer > 1.0 then
@@ -169,17 +230,25 @@ function BlackJack.resolvePayouts()
     local dealerVal = BlackJack.getValue(BlackJack.dealerHand)
     for i=1, 4 do
         local p = GameLogic.players[i]
-        local pVal = BlackJack.getValue(p.hand)
-        if p.isBusted then
-            -- lose
-        elseif BlackJack.dealerBusted then
-            p.chips = p.chips + (p.currentBet * 2)
-        elseif pVal > dealerVal then
-            p.chips = p.chips + (p.currentBet * 2)
-        elseif pVal == dealerVal then
-            p.chips = p.chips + p.currentBet -- push
+        if p.currentBet > 0 then
+            local pVal = BlackJack.getValue(p.hand)
+            if p.isBusted then
+                -- lose
+            elseif BlackJack.dealerBusted then
+                if pVal == 21 and #p.hand == 2 then
+                    p.chips = p.chips + math.floor(p.currentBet * 2.5)
+                else
+                    p.chips = p.chips + (p.currentBet * 2)
+                end
+            elseif pVal == 21 and #p.hand == 2 then
+                p.chips = p.chips + math.floor(p.currentBet * 2.5) -- Natural blackjack pays 3:2!
+            elseif pVal > dealerVal then
+                p.chips = p.chips + (p.currentBet * 2)
+            elseif pVal == dealerVal then
+                p.chips = p.chips + p.currentBet -- push
+            end
+            p.currentBet = 0
         end
-        p.currentBet = 0
     end
 end
 
@@ -222,8 +291,49 @@ function BlackJack.drawCallingUI(cx, cy, W, H)
                 GameLogic.drawCard(c, startX + (i-1)*75, startY, true)
             end
         end
+        -- Dealer total (only visible after player turns)
+        if GameLogic.phase == "DEALER_TURN" or GameLogic.phase == "PAYOUTS" then
+            local val = BlackJack.getValue(BlackJack.dealerHand)
+            GameLogic.drawText("Val: " .. val, 0, startY + 110, W, "center", {1, 0.9, 0.4, 1})
+        end
     end
 
+    -- Draw other players' hands and their Blackjack Values
+    for i=1, 4 do
+        local p = GameLogic.players[i]
+        
+        -- Physical cards for non-local
+        if i ~= GameLogic.myPlayerIdx and p.hand then
+            for _, c in ipairs(p.hand) do
+                if c.visX then GameLogic.drawCard(c, c.visX, c.visY, true) end
+            end
+        end
+        
+        -- Hand values for all players who are active
+        if p.hand and #p.hand > 0 then
+            local pVal = BlackJack.getValue(p.hand)
+            local px, py
+            if i == GameLogic.myPlayerIdx then
+                -- Local hand floats just above their cards
+                px, py = cx, H - 150
+            else
+                local bx, by = GameLogic.getPlayerAnchor(i)
+                local dirX, dirY = cx - bx, cy - by
+                local dist = math.sqrt(dirX^2 + dirY^2)
+                px = bx + (dirX/dist)*130
+                py = by + (dirY/dist)*130 + 70 -- offset nicely below their cards
+            end
+            
+            local color = {0.8, 0.8, 1, 1}
+            local txt = "Val: " .. pVal
+            if p.isBusted then txt = "BUSTED"; color = {1, 0.3, 0.3, 1} end
+            if p.isStood then txt = txt .. " (Stood)"; color = {0.6, 0.9, 0.6, 1} end
+            
+            GameLogic.drawText(txt, px - 60, py, 120, "center", color)
+        end
+    end
+
+    -- User Actions Panel
     if GameLogic.currentPlayer == GameLogic.myPlayerIdx and not GameLogic.players[GameLogic.myPlayerIdx].isBot then
         local p = GameLogic.players[GameLogic.myPlayerIdx]
         local startX = cx - 100
