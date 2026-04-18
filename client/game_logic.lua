@@ -523,26 +523,33 @@ function GameLogic.applyStateUpdate(state)
     GameLogic.totalRounds = state.totalRounds or 5
     GameLogic.maxTurnTime = state.maxTurnTime or 15
     
-    if GameLogic.activeMode and GameLogic.activeMode.applyStateExt then
-        GameLogic.activeMode.applyStateExt(state)
-    end
-    
     if state.deckPackIdx and state.deckPackIdx ~= GameLogic.currentDeckPackIdx then
         GameLogic.currentDeckPackIdx = state.deckPackIdx
         GameLogic.loadCardSprites(GameLogic.currentDeckPackIdx)
     end
     
-    if state.modeName and state.modeName ~= GameLogic.currentModeName then
+    if state.modeName and (not GameLogic.activeMode or state.modeName ~= GameLogic.currentModeName) then
         GameLogic.loadMode(state.modeName)
     end
+
+    if GameLogic.activeMode and GameLogic.activeMode.applyStateExt then
+        GameLogic.activeMode.applyStateExt(state)
+    end
     
+    local oldPlayers = GameLogic.players
     GameLogic.players = state.players
     for i=1, 4 do
         if state.players[i].isMe then
             GameLogic.myPlayerIdx = i
-            -- Init visuals if fresh
+            -- Init visuals if fresh, or preserve if already exist
             if state.players[i].hand then
-                for _, c in ipairs(state.players[i].hand) do
+                for idx, c in ipairs(state.players[i].hand) do
+                    local oldCard = (oldPlayers and oldPlayers[i] and oldPlayers[i].hand and oldPlayers[i].hand[idx])
+                    if oldCard and oldCard.suit == c.suit and oldCard.rank == c.rank then
+                        c.visX = oldCard.visX
+                        c.visY = oldCard.visY
+                        c.visRot = oldCard.visRot
+                    end
                     if not c.visX then
                         c.visX, c.visY = GameLogic.getPlayerAnchor(i)
                     end
@@ -694,7 +701,7 @@ function GameLogic.draw()
         
         -- Draw Hand Backs for Opponents Beautifully fanned out
         local hSize = p.handSize or (p.hand and #p.hand) or 0
-        if (pos ~= "BOTTOM" or GameLogic.mode == "GUEST") and hSize > 0 then
+        if (pos ~= "BOTTOM") and hSize > 0 then
             local rotStep = 0.1
             local totalArc = (hSize - 1) * rotStep
             local startRot = -totalArc / 2
@@ -716,7 +723,7 @@ function GameLogic.draw()
     end
     
     -- 5. Draw Local Hand
-    if GameLogic.mode ~= "GUEST" then
+    if true then
         local myP = GameLogic.players[GameLogic.myPlayerIdx]
         if myP and myP.hand then
             for i, c in ipairs(myP.hand) do
