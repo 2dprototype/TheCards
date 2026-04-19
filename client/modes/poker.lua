@@ -4,11 +4,39 @@ local GameLogic = nil
 local handRanks = {"High Card", "Pair", "Two Pair", "3 of a Kind", "Straight", "Flush", "Full House", "4 of a Kind", "Straight Flush"}
 local rankValues = {["2"]=2, ["3"]=3, ["4"]=4, ["5"]=5, ["6"]=6, ["7"]=7, ["8"]=8, ["9"]=9, ["10"]=10, ["J"]=11, ["Q"]=12, ["K"]=13, ["A"]=14}
 
+Poker.botProfiles = {}
+Poker.playerTendencies = {}
+
 function Poker.init(gl)
     GameLogic = gl
 end
 
+function Poker.initBots()
+    local personalities = {"aggressive", "conservative", "normal", "normal"}
+    for i = 1, 4 do
+        if GameLogic and GameLogic.players and GameLogic.players[i] and GameLogic.players[i].isBot then
+            Poker.botProfiles[i] = personalities[i] or "normal"
+        end
+    end
+end
+
+function Poker.updateTendencies(playerIdx, action, amount)
+    if not Poker.playerTendencies[playerIdx] then
+        Poker.playerTendencies[playerIdx] = {aggression = 0, bluffCount = 0, handsPlayed = 0}
+    end
+    
+    local t = Poker.playerTendencies[playerIdx]
+    t.handsPlayed = t.handsPlayed + 1
+    
+    if action == "RAISE" then
+        t.aggression = t.aggression + 1
+    elseif action == "ALL_IN" then
+        t.aggression = t.aggression + 2
+    end
+end
+
 function Poker.startRound()
+    Poker.initBots()
     GameLogic.phase = "DEALING"
     GameLogic.trick = {}
     Poker.communityCards = {}
@@ -101,6 +129,7 @@ function Poker.startRound()
 end
 
 function Poker.handleAction(playerIdx, action, amount)
+    Poker.updateTendencies(playerIdx, action, amount)
     local p = GameLogic.players[playerIdx]
     if action == "FOLD" then
         p.folded = true
@@ -361,12 +390,163 @@ function Poker.evaluateShowdown()
     GameLogic.syncState()
 end
 
+function Poker.getOpponentAggression(opponentIdx)
+    local t = Poker.playerTendencies[opponentIdx]
+    if not t or t.handsPlayed < 5 then return 0.5 end
+    return math.min(1.0, t.aggression / t.handsPlayed)
+end
+
+function Poker.getPositionAdvantage(playerIdx)
+    local positions = {}
+    local currentPos = 1
+    for i = 1, 4 do
+        if not GameLogic.players[i].folded then
+            positions[currentPos] = i
+            currentPos = currentPos + 1
+        end
+    end
+    
+    for pos, idx in ipairs(positions) do
+        if idx == playerIdx then
+            return pos / #positions
+        end
+    end
+    return 0.5
+end
+
+function Poker.evaluatePreFlop(hand)
+    if not hand or #hand < 2 then return 0.20 end
+    local rank1 = rankValues[hand[1].rank] or 2
+    local rank2 = rankValues[hand[2].rank] or 2
+    local suited = hand[1].suit == hand[2].suit
+    
+    if (rank1 == 14 and rank2 == 14) or (rank1 == 13 and rank2 == 13) then
+        return 0.95
+    elseif (rank1 == 12 and rank2 == 12) or (rank1 == 11 and rank2 == 11) then
+        return 0.85
+    elseif (rank1 == 14 and rank2 == 13) or (rank1 == 13 and rank2 == 14) then
+        return suited and 0.80 or 0.70
+    elseif rank1 == rank2 then
+        return 0.60
+    elseif math.abs(rank1 - rank2) <= 2 and suited then
+        return 0.50
+    elseif suited then
+        return 0.35
+    else
+        return 0.20
+    end
+end
+
+function Poker.getHandStrength(playerIdx)
+    local p = GameLogic.players[playerIdx]
+    local allCards = {}
+    for _, c in ipairs(p.hand) do table.insert(allCards, c) end
+    for _, c in ipairs(Poker.communityCards) do table.insert(allCards, c) end
+    
+    if #allCards < 5 then
+        return Poker.evaluatePreFlop(p.hand)
+    else
+        local combos = getCombinations(allCards, 5)
+        local bestScore = {-1}
+        for _, combo in ipairs(combos) do
+            local sc = getHandScore(combo)
+            if compareScores(sc, bestScore) > 0 then
+                bestScore = sc
+            end
+        end
+        return bestScore[1] / 9  -- Normalize 0-1
+    end
+end
+
+function Poker.calculateRaiseAmount(handStrength, potOdds, myStack, profile)
+    local baseRaise = 20
+    local multiplier = 1.0
+    
+    if handStrength > 0.90 then
+        multiplier = 3.0
+    elseif handStrength > 0.70 then
+        multiplier = 2.0
+    elseif handStrength > 0.50 then
+        multiplier = 1.5
+    elseif handStrength > 0.30 and math.random() < 0.3 then
+        multiplier = 1.0
+    end
+    
+    if profile == "aggressive" then
+        multiplier = multiplier * 1.5
+    elseif profile == "conservative" then
+        multiplier = multiplier * 0.7
+    end
+    
+    local raiseAmount = math.min(baseRaise * multiplier, myStack * 0.3)
+    return math.max(20, math.floor(raiseAmount / 10) * 10)
+end
+
+function Poker.decideAction(handStrength, potOdds, toCall, myStack, betToMatch, profile)
+    local positionAdvantage = Poker.getPositionAdvantage(GameLogic.currentPlayer)
+    local aggression = profile == "aggressive" and 1.2 or (profile == "conservative" and 0.8 or 1.0)
+    aggression = aggression * (0.8 + positionAdvantage * 0.6)
+    
+    if handStrength > 0.80 then
+        if betToMatch > myStack * 0.3 then
+            return "ALL_IN"
+        elseif toCall == 0 then
+            return "RAISE"
+        else
+            return "RAISE"
+        end
+    elseif handStrength > 0.50 then
+        if toCall == 0 then
+            return (math.random() < 0.6 * aggression) and "RAISE" or "CALL"
+        elseif potOdds > 2.0 then
+            return "CALL"
+        elseif betToMatch > myStack * 0.4 then
+            return "FOLD"
+        else
+            return "CALL"
+        end
+    elseif handStrength > 0.30 then
+        if toCall == 0 then
+            return (math.random() < 0.3 * aggression) and "RAISE" or "CALL"
+        elseif potOdds > 3.0 and toCall < myStack * 0.2 then
+            return "CALL"
+        else
+            return "FOLD"
+        end
+    else
+        if toCall == 0 then
+            return (math.random() < 0.1 * aggression) and "RAISE" or "CALL"
+        else
+            return "FOLD"
+        end
+    end
+end
+
 function Poker.playTurnBot()
     local p = GameLogic.players[GameLogic.currentPlayer]
-    if not p.folded then
-        Poker.handleAction(GameLogic.currentPlayer, "CALL")
-    else
+    if p.folded then
         Poker.advanceTurn()
+        return
+    end
+    
+    local profile = Poker.botProfiles[GameLogic.currentPlayer] or "normal"
+    local handStrength = Poker.getHandStrength(GameLogic.currentPlayer)
+    local toCall = Poker.currentBetToMatch - p.currentBet
+    local potOdds = toCall > 0 and (Poker.pot / toCall) or 999
+    local myStack = p.chips
+    local betToMatch = Poker.currentBetToMatch
+    
+    local action = Poker.decideAction(handStrength, potOdds, toCall, myStack, betToMatch, profile)
+    
+    if action == "FOLD" then
+        Poker.handleAction(GameLogic.currentPlayer, "FOLD")
+    elseif action == "CALL" then
+        Poker.handleAction(GameLogic.currentPlayer, "CALL")
+    elseif action == "RAISE" then
+        local raiseAmount = Poker.calculateRaiseAmount(handStrength, potOdds, myStack, profile)
+        Poker.handleAction(GameLogic.currentPlayer, "RAISE", raiseAmount)
+    elseif action == "ALL_IN" then
+        Poker.handleAction(GameLogic.currentPlayer, "ALL_IN")
     end
 end
 
