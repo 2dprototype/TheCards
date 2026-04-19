@@ -268,6 +268,7 @@ function BlackJack.resolvePayouts()
     end
 end
 
+
 function BlackJack.drawScoreboard(cx, cy, W, H)
     if not GameLogic.sbFont then
         local currentSize = love.graphics.getFont():getHeight()
@@ -295,7 +296,7 @@ function BlackJack.drawScoreboard(cx, cy, W, H)
     if not isCollapsed then
         local colName = 10
         local colChips = 130
-        local colBet = 190
+        local colBet = 190 -- Defined here correctly
 
         local labelY = sbY + 28
         local labelColor = {0.6, 0.6, 0.6, 1}
@@ -310,10 +311,6 @@ function BlackJack.drawScoreboard(cx, cy, W, H)
         for i = 1, 4 do
             local p = GameLogic.players[i]
             local isCurrent = (i == GameLogic.currentPlayer and GameLogic.phase ~= "ROUND_OVER")
-            if isCurrent then
-                love.graphics.setColor(1, 1, 1, 0.05)
-                love.graphics.rectangle("fill", sbX + 5, scoreY - 2, sbWidth - 10, 20, 4)
-            end
             
             local pColor = isCurrent and {0.3, 0.95, 0.4, 1} or {1, 1, 1, 1}
             if p.isStood then pColor = {0.6, 0.9, 0.6, 1} end
@@ -322,8 +319,9 @@ function BlackJack.drawScoreboard(cx, cy, W, H)
             GameLogic.drawTruncatedText(p.name, sbX + colName, scoreY, colChips - colName - 5, "left", pColor)
             GameLogic.drawText("$" .. tostring(p.chips), sbX + colChips, scoreY, 60, "left", {0.8, 0.8, 0.8, 1})
             
-            if p.currentBet > 0 then
-                GameLogic.drawText("$" .. p.currentBet, sbX + coBet, scoreY, 60, "right", {0.4, 0.9, 0.4, 1})
+            -- FIXED: Changed coBet to colBet
+            if p.currentBet and p.currentBet > 0 then
+                GameLogic.drawText("$" .. p.currentBet, sbX + colBet, scoreY, 60, "right", {0.4, 0.9, 0.4, 1})
             else
                 GameLogic.drawText("-", sbX + colBet, scoreY, 60, "right", {0.4, 0.4, 0.4, 1})
             end
@@ -334,11 +332,12 @@ function BlackJack.drawScoreboard(cx, cy, W, H)
     love.graphics.setFont(oldFont)
 end
 
+
 function BlackJack.drawCallingUI(cx, cy, W, H)
     -- Dealer Hand
     if GameLogic.phase ~= "BETTING" and BlackJack.dealerHand and #BlackJack.dealerHand > 0 then
         local startX = cx - (#BlackJack.dealerHand * 35)
-        local startY = cy - 140
+        local startY = cy - 100
         GameLogic.drawText("House Dealer", 0, startY - 20, W, "center", {1, 0.8, 0.8, 1})
         for i, c in ipairs(BlackJack.dealerHand) do
             if i == 1 and GameLogic.phase == "PLAYER_TURNS" then

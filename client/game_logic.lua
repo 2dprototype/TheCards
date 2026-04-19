@@ -736,7 +736,8 @@ function GameLogic.draw()
         
         -- Draw Hand Backs for Opponents Beautifully fanned out
         local hSize = p.handSize or (p.hand and #p.hand) or 0
-        if (pos ~= "BOTTOM") and hSize > 0 then
+        -- if (pos ~= "BOTTOM") and hSize > 0 then
+        if (pos ~= "BOTTOM") and hSize > 0 and GameLogic.currentModeName ~= "black_jack" then
             if GameLogic.currentModeName == "poker" and GameLogic.phase == "SHOWDOWN" and p.hand and not p.folded then
                 local rotStep = math.pi / 24
                 local totalArc = (hSize - 1) * rotStep
