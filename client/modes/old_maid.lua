@@ -6,10 +6,20 @@ local ranks = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"}
 
 OldMaid.finishOrder = {}
 OldMaid.discardPile = {}
+OldMaid.activeHover = nil -- Tracks { pickerIdx, targetIdx, cardIdx }
 local pendingPickedCard = nil
 
 function OldMaid.init(gl)
     GameLogic = gl
+end
+
+-- Local shuffle function
+function OldMaid.shuffleSelf()
+    local myHand = GameLogic.players[GameLogic.myPlayerIdx].hand
+    if myHand and #myHand > 1 then
+        GameLogic.shuffle(myHand)
+        GameLogic.syncState() -- Tell everyone the new order
+    end
 end
 
 function OldMaid.generateDeck()
@@ -38,6 +48,7 @@ function OldMaid.startRound()
     GameLogic.flyingCards = {}
     OldMaid.finishOrder = {}
     OldMaid.discardPile = {}
+    OldMaid.activeHover = nil
     pendingPickedCard = nil
     
     local deck = OldMaid.generateDeck()
@@ -203,7 +214,40 @@ function OldMaid.advanceTurn()
     OldMaid.checkForMatchOver()
 end
 
+function OldMaid.setHoverState(pickerIdx, targetIdx, cardIdx)
+    if cardIdx then
+        OldMaid.activeHover = { pickerIdx = pickerIdx, targetIdx = targetIdx, cardIdx = cardIdx }
+    else
+        OldMaid.activeHover = nil
+    end
+    -- This broadcasts to EVERYONE via GameLogic.getState()
+    GameLogic.syncState() 
+end
+
 function OldMaid.update(dt)
+    -- Local Hover Detection: If it's my turn, tell the host where I'm looking
+    if GameLogic.phase == "PICKING" and GameLogic.currentPlayer == GameLogic.myPlayerIdx then
+        local targetIdx = OldMaid.getTargetPlayer(GameLogic.currentPlayer)
+        if targetIdx then
+            local mx, my = love.mouse.getPosition()
+            local hoveredCard = OldMaid.getCardAtPos(targetIdx, mx, my)
+            
+            local lastHoverIdx = OldMaid.activeHover and OldMaid.activeHover.cardIdx or nil
+            if hoveredCard ~= lastHoverIdx then
+                if GameLogic.mode == "GUEST" then
+                    require("network").sendGameMessage("host", { 
+                        action = "OLD_MAID_HOVER", 
+                        targetIdx = targetIdx, 
+                        cardIdx = hoveredCard,
+                        pickerIdx = GameLogic.myPlayerIdx 
+                    })
+                else
+                    OldMaid.setHoverState(GameLogic.myPlayerIdx, targetIdx, hoveredCard)
+                end
+            end
+        end
+    end
+
     if GameLogic.mode == "GUEST" then return end
     
     if GameLogic.phase == "PICKING_ANIMATION" then
@@ -281,6 +325,7 @@ function OldMaid.pickCard(targetIdx, cardIdx)
     pendingPickedCard = c
     table.insert(GameLogic.flyingCards, { card = c, targetId = GameLogic.currentPlayer, sourceId = targetIdx })
     
+    OldMaid.activeHover = nil -- clear hover
     GameLogic.phase = "PICKING_ANIMATION"
     GameLogic.turnTimer = 2.0
     GameLogic.syncState()
@@ -289,18 +334,18 @@ end
 function OldMaid.getStateExt(state)
     state.finishOrder = OldMaid.finishOrder
     state.discardPile = OldMaid.discardPile
+    state.activeHover = OldMaid.activeHover 
 end
 
 function OldMaid.applyStateExt(state)
-    if state.finishOrder then
-        OldMaid.finishOrder = state.finishOrder
-    end
-    if state.discardPile then
-        OldMaid.discardPile = state.discardPile
-    end
+    if state.finishOrder then OldMaid.finishOrder = state.finishOrder end
+    if state.discardPile then OldMaid.discardPile = state.discardPile end
+    -- BROADCAST FIX: Everyone sets this value, so everyone sees the visual offset
+    OldMaid.activeHover = state.activeHover
 end
 
 function OldMaid.handleNetworkMessage(evt)
+    -- print(evt.data.action)
     if evt.data.action == "PICK_CARD" then
         if GameLogic.phase == "PICKING" and evt.clientId == GameLogic.players[GameLogic.currentPlayer].id then
             local targetIdx = OldMaid.getTargetPlayer(GameLogic.currentPlayer)
@@ -309,12 +354,89 @@ function OldMaid.handleNetworkMessage(evt)
             end
             return true
         end
+    elseif evt.data.action == "OLD_MAID_HOVER" then
+        OldMaid.setHoverState(evt.data.pickerIdx, evt.data.targetIdx, evt.data.cardIdx)
+        return true
+    elseif evt.data.action == "SHUFFLE_SELF" then
+        -- Host handles the shuffle request
+        local pIdx = 0
+        for i=1,4 do if GameLogic.players[i].id == evt.clientId then pIdx = i break end end
+        if pIdx > 0 then
+            GameLogic.shuffle(GameLogic.players[pIdx].hand)
+            GameLogic.syncState()
+        end
+        return true
     end
     return false
 end
 
+-- Reusable hit-detection math for cards on the sides
+function OldMaid.getCardAtPos(targetIdx, mx, my)
+    local tPlayer = GameLogic.players[targetIdx]
+    local hSize = tPlayer.handSize or (tPlayer.hand and #tPlayer.hand) or 0
+    if hSize == 0 then return nil end
+    
+    local cx, cy = _G.getW() / 2, _G.getH() / 2
+    local rel = (targetIdx - GameLogic.myPlayerIdx) % 4
+    
+    local lx, ly, angle = cx, cy, 0
+    if rel == 1 then -- LEFT
+        lx = 140; angle = -(math.pi/2)
+    elseif rel == 2 then -- TOP
+        ly = 140; angle = 0
+    elseif rel == 3 then -- RIGHT
+        lx = _G.getW() - 140; angle = math.pi/2
+    else return nil end
+    
+    local CARD_W, CARD_H = 70, 100
+    
+    for j = hSize, 1, -1 do
+        local offset = (j - hSize/2) * 12
+        local cxCard, cyCard = lx, ly
+        
+        if rel == 1 then cyCard = cy + offset
+        elseif rel == 2 then cxCard = cx - offset
+        elseif rel == 3 then cyCard = cy - offset end
+        
+        -- Apply the hover offset physically to the hitbox
+        local hoverOut = OldMaid.getCardHoverOffset(targetIdx, j)
+        if hoverOut > 0 then
+            if rel == 1 then cxCard = cxCard + hoverOut
+            elseif rel == 2 then cyCard = cyCard + hoverOut
+            elseif rel == 3 then cxCard = cxCard - hoverOut end
+        end
+        
+        local ca, sa = math.cos(angle), math.sin(angle)
+        local dx, dy = mx - cxCard, my - cyCard
+        local rx = dx * ca - dy * sa
+        local ry = dx * sa + dy * ca
+        
+        if math.abs(rx) < CARD_W/2 and math.abs(ry) < CARD_H/2 then return j end
+    end
+    return nil
+end
+
+function OldMaid.getCardHoverOffset(playerIdx, cardIdx)
+    if OldMaid.activeHover and OldMaid.activeHover.targetIdx == playerIdx and OldMaid.activeHover.cardIdx == cardIdx then
+        return 20 -- Pixels to pop out when hovered
+    end
+    return 0
+end
+
 function OldMaid.mousepressed(x, y, button)
     if button ~= 1 then return end
+    
+    -- Check Shuffle Button
+    local bx, by, bw, bh = _G.getW()/2 - 50, _G.getH() - 180, 100, 30
+    if x >= bx and x <= bx + bw and y >= by and y <= by + bh then
+        if GameLogic.mode == "GUEST" then
+            require("network").sendGameMessage("host", { action = "SHUFFLE_SELF" })
+        else
+            OldMaid.shuffleSelf()
+        end
+        return
+    end
+    
     if GameLogic.phase ~= "PICKING" then return end
     if GameLogic.currentPlayer ~= GameLogic.myPlayerIdx then return end
     if GameLogic.players[GameLogic.myPlayerIdx].isBot then return end
@@ -322,97 +444,45 @@ function OldMaid.mousepressed(x, y, button)
     local targetIdx = OldMaid.getTargetPlayer(GameLogic.currentPlayer)
     if not targetIdx then return end
     
-    local tPlayer = GameLogic.players[targetIdx]
-    local hSize = tPlayer.handSize or (tPlayer.hand and #tPlayer.hand) or 0
-    if hSize == 0 then return end
-    
-    local cx, cy = _G.getW() / 2, _G.getH() / 2
-    local pos = nil
-    local rel = (targetIdx - GameLogic.myPlayerIdx) % 4
-    if rel == 0 then pos = "BOTTOM"
-    elseif rel == 1 then pos = "LEFT"
-    elseif rel == 2 then pos = "TOP"
-    elseif rel == 3 then pos = "RIGHT" end
-    
-    if pos == "BOTTOM" then return end
-    
-    local lx, ly = cx, cy
-    local edgeOffset = 40
-    
-    if pos == "LEFT" then
-        lx = edgeOffset; ly = cy; 
-    elseif pos == "TOP" then
-        lx = cx; ly = edgeOffset; 
-    elseif pos == "RIGHT" then
-        lx = _G.getW() - edgeOffset; ly = cy; 
-    end
-    
-    local CARD_W = 70
-    local CARD_H = 100
-    
-    for j = hSize, 1, -1 do
-        local offset = (j - hSize/2) * 12
-        local cxCard, cyCard = lx, ly
-        
-        if pos == "LEFT" then 
-            cxCard = 140
-            cyCard = cy + offset
-            local ca = math.cos(-(math.pi/2))
-            local sa = math.sin(-(math.pi/2))
-            local dx = x - cxCard
-            local dy = y - cyCard
-            local rx = dx * ca - dy * sa
-            local ry = dx * sa + dy * ca
-            if math.abs(rx) < CARD_W/2 and math.abs(ry) < CARD_H/2 then
-                if GameLogic.mode == "GUEST" then
-                    local Network = require("network")
-                    Network.sendGameMessage("host", { action = "PICK_CARD", targetIdx = targetIdx, cardIdx = j })
-                else
-                    OldMaid.pickCard(targetIdx, j)
-                end
-                break
-            end
-        elseif pos == "TOP" then 
-            cxCard = cx - offset
-            cyCard = 140
-            local ca = math.cos(0)
-            local sa = math.sin(0)
-            local dx = x - cxCard
-            local dy = y - cyCard
-            local rx = dx * ca - dy * sa
-            local ry = dx * sa + dy * ca
-            if math.abs(rx) < CARD_W/2 and math.abs(ry) < CARD_H/2 then
-                if GameLogic.mode == "GUEST" then
-                    local Network = require("network")
-                    Network.sendGameMessage("host", { action = "PICK_CARD", targetIdx = targetIdx, cardIdx = j })
-                else
-                    OldMaid.pickCard(targetIdx, j)
-                end
-                break
-            end
-        elseif pos == "RIGHT" then 
-            cxCard = _G.getW() - 140
-            cyCard = cy - offset
-            local ca = math.cos(-(-math.pi/2))
-            local sa = math.sin(-(-math.pi/2))
-            local dx = x - cxCard
-            local dy = y - cyCard
-            local rx = dx * ca - dy * sa
-            local ry = dx * sa + dy * ca
-            if math.abs(rx) < CARD_W/2 and math.abs(ry) < CARD_H/2 then
-                if GameLogic.mode == "GUEST" then
-                    local Network = require("network")
-                    Network.sendGameMessage("host", { action = "PICK_CARD", targetIdx = targetIdx, cardIdx = j })
-                else
-                    OldMaid.pickCard(targetIdx, j)
-                end
-                break
-            end
+    local j = OldMaid.getCardAtPos(targetIdx, x, y)
+    if j then
+        if GameLogic.mode == "GUEST" then
+            local Network = require("network")
+            Network.sendGameMessage("host", { action = "PICK_CARD", targetIdx = targetIdx, cardIdx = j })
+        else
+            OldMaid.pickCard(targetIdx, j)
         end
     end
 end
 
 function OldMaid.drawCallingUI(cx, cy, W, H)
+    -- Target Player Highlight (Pulsing Effect)
+    if GameLogic.phase == "PICKING" then
+        local targetIdx = OldMaid.getTargetPlayer(GameLogic.currentPlayer)
+        if targetIdx then
+            local rel = (targetIdx - GameLogic.myPlayerIdx) % 4
+            local hx, hy = cx, cy
+            local offset = 140
+            local shouldDraw = false
+            
+            if rel == 1 then hx = offset; hy = cy; shouldDraw = true
+            elseif rel == 2 then hx = cx; hy = offset; shouldDraw = true
+            elseif rel == 3 then hx = W - offset; hy = cy; shouldDraw = true end
+            
+            if shouldDraw then
+                local time = love.timer.getTime()
+                local pulse = (math.sin(time * 5) + 1) / 2 * 0.3 + 0.1 -- Alpha ranges 0.1 to 0.4
+                love.graphics.setColor(1, 0.8, 0.2, pulse)
+                love.graphics.circle("fill", hx, hy, 100)
+                
+                if GameLogic.currentPlayer == GameLogic.myPlayerIdx then
+                    GameLogic.drawText("Pick a card!", hx - 60, hy - 110, 120, "center", {1, 0.9, 0.2, 1})
+                end
+            end
+        end
+    end
+
+    -- Discard Pile
     for _, c in ipairs(OldMaid.discardPile) do
         love.graphics.push()
         love.graphics.translate(c.visX or cx, c.visY or cy)
@@ -421,6 +491,16 @@ function OldMaid.drawCallingUI(cx, cy, W, H)
         GameLogic.drawCard(c, -35, -50, true)
         
         love.graphics.pop()
+    end
+    
+    -- SHUFFLE BUTTON
+    local myP = GameLogic.players[GameLogic.myPlayerIdx]
+    if myP.hand and #myP.hand > 1 then
+        local bx, by, bw, bh = W/2 - 50, H - 180, 100, 30
+        love.graphics.setColor(0.2, 0.2, 0.2, 0.8)
+        love.graphics.rectangle("fill", bx, by, bw, bh, 5)
+        love.graphics.setColor(1, 1, 1)
+        love.graphics.printf("SHUFFLE", bx, by + 8, bw, "center")
     end
 end
 

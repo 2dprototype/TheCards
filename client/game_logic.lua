@@ -437,6 +437,11 @@ function GameLogic.getStateFor(clientId)
     if GameLogic.activeMode and GameLogic.activeMode.getStateExt then
         GameLogic.activeMode.getStateExt(state)
     end
+    
+    -- CRITICAL: This pulls the 'activeHover' from Old Maid into the network packet
+    if GameLogic.activeMode and GameLogic.activeMode.getStateExt then
+        GameLogic.activeMode.getStateExt(state)
+    end
     return state
 end
 
@@ -512,6 +517,7 @@ function GameLogic.applyStateUpdate(state)
     GameLogic.phase = state.phase
     GameLogic.currentPlayer = state.currentPlayer
     GameLogic.turnTimer = state.turnTimer
+    
     -- Keep trick visual persistence if trick shrinks
     if #state.trick == 0 and #GameLogic.trick > 0 then
         -- Find winner dynamically to simulate flying cards on guest side... Too complex for state sync.
@@ -567,6 +573,11 @@ function GameLogic.applyStateUpdate(state)
         if GameLogic.activeMode and GameLogic.activeMode.applyPlayerStateExt then
             GameLogic.activeMode.applyPlayerStateExt(state.players[i], GameLogic.players[i])
         end
+    end
+    
+    -- CRITICAL: This tells Old Maid to update its local 'activeHover' variable
+    if GameLogic.activeMode and GameLogic.activeMode.applyStateExt then
+        GameLogic.activeMode.applyStateExt(state)
     end
 end
 
@@ -734,10 +745,11 @@ function GameLogic.draw()
 
         love.graphics.pop()
         
-        -- Draw Hand Backs for Opponents Beautifully fanned out
+-- Draw Hand Backs for Opponents Beautifully fanned out
         local hSize = p.handSize or (p.hand and #p.hand) or 0
-        -- if (pos ~= "BOTTOM") and hSize > 0 then
         if (pos ~= "BOTTOM") and hSize > 0 and GameLogic.currentModeName ~= "black_jack" then
+            
+            -- 1. SHOWDOWN LOGIC (Poker specific)
             if GameLogic.currentModeName == "poker" and GameLogic.phase == "SHOWDOWN" and p.hand and not p.folded then
                 local rotStep = math.pi / 24
                 local totalArc = (hSize - 1) * rotStep
@@ -761,6 +773,8 @@ function GameLogic.draw()
                     GameLogic.drawCard(c, -35, -50, true)
                     love.graphics.pop()
                 end
+            
+            -- 2. STANDARD HAND BACKS (Old Maid Hover & Shuffle Sync)
             else
                 local rotStep = GameLogic.currentModeName == "old_maid" and 0 or 0.1
                 local totalArc = (hSize - 1) * rotStep
@@ -769,14 +783,32 @@ function GameLogic.draw()
                 for j = 1, hSize do 
                     local offset = (j - hSize/2) * 12
                     local rz = startRot + ((j-1) * rotStep)
+                    
+                    -- HOVER BROADCAST RENDER:
+                    -- We ask the current mode for the offset of card 'j' belonging to player 'i'
+                    local hoverOut = 0
+                    if GameLogic.activeMode and GameLogic.activeMode.getCardHoverOffset then
+                        hoverOut = GameLogic.activeMode.getCardHoverOffset(i, j)
+                    end
+                    
+                    local hx, hy = 0, 0
+                    if hoverOut > 0 then
+                        if pos == "LEFT" then 
+                            hx = hoverOut -- Slide right toward center
+                        elseif pos == "TOP" then 
+                            hy = hoverOut -- Slide down toward center
+                        elseif pos == "RIGHT" then 
+                            hx = -hoverOut -- Slide left toward center
+                        end
+                    end
+
+                    -- Render with calculated hover offsets
                     if pos == "LEFT" then 
-                        GameLogic.drawCardBack(140, cy + offset, math.pi/2 + rz)
+                        GameLogic.drawCardBack(140 + hx, cy + offset + hy, math.pi/2 + rz)
                     elseif pos == "TOP" then 
-                        GameLogic.drawCardBack(cx - offset, 140, rz)
+                        GameLogic.drawCardBack(cx - offset + hx, 140 + hy, rz)
                     elseif pos == "RIGHT" then 
-                        GameLogic.drawCardBack(_G.getW() - 140, cy - offset, -math.pi/2 + rz) 
-                    elseif pos == "BOTTOM" then
-                        GameLogic.drawCardBack(cx + offset, _G.getH() - 140, rz)
+                        GameLogic.drawCardBack(_G.getW() - 140 + hx, cy - offset + hy, -math.pi/2 + rz) 
                     end
                 end
             end

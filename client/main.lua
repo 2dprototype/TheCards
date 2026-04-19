@@ -36,7 +36,7 @@ love.mouse.getPosition = function()
 end
 
 function love.load(args)
-    love.window.setMode(_G.SCREEN_WIDTH, _G.SCREEN_HEIGHT, {resizable=true, vsync=true, minwidth=700, minheight=400})
+    love.window.setMode(_G.SCREEN_WIDTH, _G.SCREEN_HEIGHT, {resizable=true, vsync=true, minwidth=300, minheight=300})
     love.window.setTitle("TheCards")
     
    
