@@ -185,7 +185,7 @@ function CallBridge.drawScoreboard(cx, cy, W, H)
     love.graphics.setColor(1, 1, 1, 0.1)
     love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 10)
 
-    GameLogic.drawText("SCOREBOARD (Call Bridge)", sbX, sbY + 12, sbWidth, "center", {1, 0.85, 0.3, 1})
+    GameLogic.drawText("SCOREBOARD", sbX, sbY + 12, sbWidth, "center", {1, 0.85, 0.3, 1})
 
     local colName  = 15
     local colCall  = 130

@@ -21,7 +21,7 @@ function Poker.startRound()
         GameLogic.players[i].currentBet = 0
         GameLogic.players[i].folded = false
         if not GameLogic.players[i].chips then
-            GameLogic.players[i].chips = 1000
+            GameLogic.players[i].chips = 5000
         end
         -- Initialize animation variables
         GameLogic.players[i].visChips = GameLogic.players[i].chips
@@ -398,60 +398,87 @@ function Poker.update(dt)
 end
 
 local chipColors = {
-    {val=100, col={0.15, 0.15, 0.15, 1}},-- Black
-    {val=25, col={0.1, 0.6, 0.2, 1}},   -- Casino Green
-    {val=5, col={0.8, 0.15, 0.15, 1}},  -- Red
-    {val=1, col={0.9, 0.9, 0.9, 1}}     -- White
+    {val=1000, col={0.95, 0.75, 0.10, 1}}, -- Electric Yellow/Gold
+    {val=500,  col={0.60, 0.20, 0.70, 1}}, -- Vibrant Purple
+    {val=100,  col={0.10, 0.10, 0.12, 1}}, -- Rich Black (slightly softened)
+    {val=50,   col={0.00, 0.45, 0.80, 1}}, -- Electric Blue
+    {val=25,   col={0.05, 0.65, 0.15, 1}}, -- Emerald Green
+    {val=10,   col={0.95, 0.50, 0.00, 1}}, -- Bright Orange
+    {val=5,    col={0.85, 0.15, 0.20, 1}}, -- Ruby Red
+    {val=1,    col={0.92, 0.92, 0.95, 1}}  -- Pearl White
 }
 
-local function drawChipStack(amount, x, y, spreadRight)
+-- 'maxCols' determines how many stacks wide the grid can be before wrapping to a new row
+local function drawChipStack(amount, x, y)
+    maxCols = 4 -- Default to 4 columns if not specified
     local cx, cy = x, y
     local stackTotal = amount
-    local hOffset = 0
-    local zOffset = 0
-    local chipsInStack = 0
+    
+    local spacingX = 28 -- Horizontal distance between stacks
+    local spacingY = 28 -- Vertical distance between rows of stacks
+    local maxChipsPerStack = 6
+    
+    local currentStackIndex = 0
 
     if stackTotal < 1 then return end
     
     for _, cv in ipairs(chipColors) do
+        -- Calculate how many chips of this specific color we need
         local num = math.floor(stackTotal / cv.val)
         stackTotal = stackTotal - (num * cv.val)
         
-        for i=1, num do
-            -- Drop Shadow
-            love.graphics.setColor(0, 0, 0, 0.4)
-            love.graphics.circle("fill", cx + hOffset + 2, cy - zOffset + 2, 12)
+        if num > 0 then
+            local chipsInCurrentStack = 0
+            
+            for i = 1, num do
+                -- Calculate grid position based on the current stack index
+                local col = currentStackIndex % maxCols
+                local row = math.floor(currentStackIndex / maxCols)
+                
+                local hOffset = col * spacingX
+                local vOffset = row * spacingY
+                local zOffset = chipsInCurrentStack * 3
+                
+                local drawX = cx + hOffset
+                local drawY = cy + vOffset - zOffset
 
-            -- Base Chip Color
-            love.graphics.setColor(cv.col)
-            love.graphics.circle("fill", cx + hOffset, cy - zOffset, 12)
-            
-            -- Casino Edge Stripes
-            love.graphics.setColor(1, 1, 1, 0.6)
-            love.graphics.setLineWidth(2)
-            love.graphics.line(cx + hOffset - 12, cy - zOffset, cx + hOffset - 7, cy - zOffset)
-            love.graphics.line(cx + hOffset + 7, cy - zOffset, cx + hOffset + 12, cy - zOffset)
-            love.graphics.line(cx + hOffset, cy - zOffset - 12, cx + hOffset, cy - zOffset - 7)
-            love.graphics.line(cx + hOffset, cy - zOffset + 7, cx + hOffset, cy - zOffset + 12)
-            love.graphics.setLineWidth(1)
-            
-            -- Inner detailing
-            love.graphics.setColor(cv.col)
-            love.graphics.circle("fill", cx + hOffset, cy - zOffset, 8)
-            love.graphics.setColor(1, 1, 1, 0.3)
-            love.graphics.circle("line", cx + hOffset, cy - zOffset, 8)
-            love.graphics.setColor(0.1, 0.1, 0.1, 0.8)
-            love.graphics.circle("line", cx + hOffset, cy - zOffset, 12)
-            
-            zOffset = zOffset + 3
-            chipsInStack = chipsInStack + 1
-            
-            -- Build stacks 6 high before spreading out to make money look more substantial
-            if chipsInStack >= 6 then 
-                hOffset = hOffset + (spreadRight and 26 or -26)
-                zOffset = 0
-                chipsInStack = 0
+                -- Drop Shadow
+                love.graphics.setColor(0, 0, 0, 0.4)
+                love.graphics.circle("fill", drawX + 2, drawY + 2, 12)
+
+                -- Base Chip Color
+                love.graphics.setColor(cv.col)
+                love.graphics.circle("fill", drawX, drawY, 12)
+                
+                -- Casino Edge Stripes
+                love.graphics.setColor(1, 1, 1, 0.6)
+                love.graphics.setLineWidth(2)
+                love.graphics.line(drawX - 12, drawY, drawX - 7, drawY)
+                love.graphics.line(drawX + 7, drawY, drawX + 12, drawY)
+                love.graphics.line(drawX, drawY - 12, drawX, drawY - 7)
+                love.graphics.line(drawX, drawY + 7, drawX, drawY + 12)
+                love.graphics.setLineWidth(1)
+                
+                -- Inner detailing
+                love.graphics.setColor(cv.col)
+                love.graphics.circle("fill", drawX, drawY, 8)
+                love.graphics.setColor(1, 1, 1, 0.3)
+                love.graphics.circle("line", drawX, drawY, 8)
+                love.graphics.setColor(0.1, 0.1, 0.1, 0.8)
+                love.graphics.circle("line", drawX, drawY, 12)
+                
+                chipsInCurrentStack = chipsInCurrentStack + 1
+                
+                -- If the stack reaches the height limit, start a new stack (unless it's the last chip of this color)
+                if chipsInCurrentStack >= maxChipsPerStack and i ~= num then 
+                    currentStackIndex = currentStackIndex + 1
+                    chipsInCurrentStack = 0
+                end
             end
+            
+            -- Important: Once we finish drawing all chips of the current color, 
+            -- force the next color to begin in a brand-new stack.
+            currentStackIndex = currentStackIndex + 1
         end
     end
 end
@@ -459,7 +486,7 @@ end
 function Poker.drawScoreboard(cx, cy, W, H)
     -- Increased width and height to prevent squishing
     local sbWidth = 340
-    local sbHeight = 100 + (4 * 35)
+    local sbHeight = 80 + (4 * 35)
     local sbX = W - sbWidth - 20
     local sbY = 20
 
@@ -470,23 +497,23 @@ function Poker.drawScoreboard(cx, cy, W, H)
     love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 10)
 
     -- Header
-    GameLogic.drawText("SCOREBOARD (Texas Hold'em)", sbX, sbY + 12, sbWidth, "center", {1, 0.85, 0.3, 1})
+    GameLogic.drawText("SCOREBOARD", sbX, sbY + 12, sbWidth, "center", {1, 0.85, 0.3, 1})
     
     -- Entries
     local scoreY = sbY + 50
     for i=1, 4 do
         local p = GameLogic.players[i]
         local pColor = p.folded and {0.5, 0.5, 0.5, 1} or {1, 1, 1, 1}
-        local nameStr = (i == Poker.dealerIdx and "[D] " or "") .. p.name
+        -- local nameStr = (i == Poker.dealerIdx and "[D] " or "") .. p.name
         
         -- Strict columns prevent text overlap
-        GameLogic.drawText(nameStr, sbX + 15, scoreY, 130, "left", pColor)
+        GameLogic.drawText(p.name, sbX + 15, scoreY, 130, "left", pColor)
         GameLogic.drawText("$" .. tostring(p.chips), sbX + 150, scoreY, 80, "left", {0.8, 0.8, 0.8, 1})
         
         if p.folded then
             GameLogic.drawText("FOLD", sbX + 230, scoreY, 95, "right", {0.8, 0.3, 0.3, 1})
         elseif p.currentBet > 0 then
-            GameLogic.drawText("Bet: $" .. p.currentBet, sbX + 230, scoreY, 95, "right", {0.4, 0.9, 0.4, 1})
+            GameLogic.drawText("$" .. p.currentBet, sbX + 230, scoreY, 95, "right", {0.4, 0.9, 0.4, 1})
         else
             GameLogic.drawText("-", sbX + 230, scoreY, 95, "right", {0.4, 0.4, 0.4, 1})
         end
@@ -494,9 +521,9 @@ function Poker.drawScoreboard(cx, cy, W, H)
     end
     
     -- Pot Section
-    love.graphics.setColor(1, 0.85, 0.2, 1)
-    love.graphics.rectangle("line", sbX + 15, scoreY + 10, sbWidth - 30, 40, 5)
-    GameLogic.drawText("CURRENT POT: $" .. Poker.pot, sbX + 15, scoreY + 20, sbWidth - 30, "center", {1, 0.85, 0.2, 1})
+    -- GameLogic.drawText("POT: $" .. Poker.pot, sbX + 15, scoreY + 20, sbWidth - 30, "center", {1, 0.85, 0.2, 1})
+    GameLogic.drawText("POT", sbX + 15, scoreY, sbWidth - 30, "left", {1, 0.85, 0.2, 1})
+    GameLogic.drawText("$" .. Poker.pot, sbX + 230, scoreY, 95, "right", {1, 0.85, 0.2, 1})
 end
 
 function Poker.drawCallingUI(cx, cy, W, H)
@@ -551,8 +578,8 @@ function Poker.drawCallingUI(cx, cy, W, H)
             local bankX, bankY
             if i == GameLogic.myPlayerIdx then
                 -- Place local player bankroll completely to the left
-                bankX = 120
-                bankY = H - 60
+                bankX = 300
+                bankY = H - 100
             else
                 local isRightSide = px > cx
                 bankX = isRightSide and (px - 100) or (px + 100)
@@ -562,7 +589,7 @@ function Poker.drawCallingUI(cx, cy, W, H)
             drawChipStack(p.visChips, bankX, bankY, not (px > cx))
             
             -- Optional label under the bankroll stack
-            GameLogic.drawText("$"..math.floor(p.visChips), bankX - 30, bankY + 10, 60, "center", {0.8, 0.8, 0.8, 1})
+            -- GameLogic.drawText("$"..math.floor(p.visChips), bankX - 30, bankY + 10, 60, "center", {0.8, 0.8, 0.8, 1})
         end
 
         -- 2. Draw Active Bets
@@ -576,10 +603,10 @@ function Poker.drawCallingUI(cx, cy, W, H)
             betY = betY - 80
         end
         
-        if (p.visBet or 0) >= 1 then
-            drawChipStack(p.visBet, betX, betY, true)
-            GameLogic.drawText("$"..math.floor(p.visBet), betX - 30, betY + 15, 60, "center", {1, 1, 1, 1})
-        end
+        -- if (p.visBet or 0) >= 1 then
+            -- drawChipStack(p.visBet, betX, betY, true)
+            -- GameLogic.drawText("$"..math.floor(p.visBet), betX - 30, betY + 15, 60, "center", {1, 1, 1, 1})
+        -- end
         
         -- Dealer Button (pushed inward slightly less and offset)
         if Poker.dealerIdx == i then
@@ -595,10 +622,10 @@ function Poker.drawCallingUI(cx, cy, W, H)
     end
     
     -- Draw Pot centrally, safely above the community cards
-    if (Poker.visPot or 0) >= 1 then
-        drawChipStack(Poker.visPot, cx - 15, cy - 100, true)
-        GameLogic.drawText("POT: $"..math.floor(Poker.visPot), cx - 100, cy - 140, 200, "center", {1, 0.85, 0.2, 1})
-    end
+    -- if (Poker.visPot or 0) >= 1 then
+        -- drawChipStack(Poker.visPot, cx - 15, cy - 100, true)
+        -- GameLogic.drawText("POT: $"..math.floor(Poker.visPot), cx - 100, cy - 140, 200, "center", {1, 0.85, 0.2, 1})
+    -- end
 end
 
 function Poker.mousepressed(x, y, button)

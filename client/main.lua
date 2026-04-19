@@ -255,7 +255,8 @@ end
 function setupGuestLobbyUI()
     UI.clear()
     local cx, cy = _G.getW() / 2, _G.getH() / 2
-    UI.addLabel("lbl_guest_lobby", "Waiting for Host...", cx - 100, cy - 100)
+    UI.addLabel("lbl_guest_lobby", "Waiting...", cx - 100, cy - 100)
+    UI.addLabel("lbl_guest_lobby2", "Enter your Room Code.", cx - 100, cy - 70)
     UI.addButton("btn_back", "Disconnect", cx - 100, cy + 100, 200, 50, function()
         Network.disconnect()
         appState = "MENU"
@@ -424,7 +425,8 @@ _G.handleNetworkEvent = function(evt)
     if evt.type == "ROOM_CREATED" then
         Network.roomCode = evt.code
     elseif evt.type == "JOIN_SUCCESS" then
-        UI.setText("lbl_guest_lobby", "Joined Room! Waiting for host to start...")
+        UI.setText("lbl_guest_lobby", "Joined Room!")
+        UI.setText("lbl_guest_lobby2", "Waiting for host to start...")
     elseif evt.type == "CLIENT_JOINED" then
         -- Handled by network mapping internally if needed
     elseif evt.type == "GAME_MSG" or evt.type == "GUEST_MSG" then

@@ -264,7 +264,7 @@ function BlackJack.drawScoreboard(cx, cy, W, H)
     love.graphics.setColor(1, 1, 1, 0.1)
     love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 10)
 
-    GameLogic.drawText("SCOREBOARD (Black Jack)", sbX, sbY + 12, sbWidth, "center", {1, 0.85, 0.3, 1})
+    GameLogic.drawText("SCOREBOARD", sbX, sbY + 12, sbWidth, "center", {1, 0.85, 0.3, 1})
     
     local scoreY = sbY + 65
     for i=1, 4 do
