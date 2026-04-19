@@ -509,14 +509,25 @@ function Poker.decideAction(handStrength, potOdds, toCall, myStack, betToMatch, 
         if toCall == 0 then
             return (math.random() < 0.3 * aggression) and "RAISE" or "CALL"
         elseif potOdds > 3.0 and toCall < myStack * 0.2 then
+            return (math.random() < 0.2 * aggression) and "RAISE" or "CALL"
+        elseif toCall > 0 and math.random() < 0.15 * aggression then
+            -- Bluff 15% of the time, especially aggressive ones
             return "CALL"
         else
             return "FOLD"
         end
     else
+        -- Trash hands. We need them to not ALWAYS fold early on to keep the pot alive! Check heavily, and sometimes bluff call.
         if toCall == 0 then
-            return (math.random() < 0.1 * aggression) and "RAISE" or "CALL"
+            return (math.random() < 0.15 * aggression) and "RAISE" or "CALL"
+        elseif toCall <= GameLogic.players[GameLogic.currentPlayer].chips * 0.05 then
+            -- If it's a very cheap small bet compared to their stack, occasionally call.
+            return (math.random() < 0.40 * aggression) and "CALL" or "FOLD"
         else
+            -- Huge bets? Occasionally completely shock everyone with an insane bluff!
+            if math.random() < 0.05 * aggression then
+                return (math.random() < 0.2) and "ALL_IN" or "CALL"
+            end
             return "FOLD"
         end
     end
@@ -608,7 +619,8 @@ function Poker.update(dt)
             end
         end
     end
-    -- Card sliding animations
+    
+    -- Card sliding animations loop!
     if Poker.communityCards then
         local cx = _G.getW() / 2
         local cy = _G.getH() / 2
@@ -750,7 +762,7 @@ function Poker.drawScoreboard(cx, cy, W, H)
     love.graphics.setColor(1, 1, 1, 0.1)
     love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 8)
 
-    local btnText = isCollapsed and "[+] SCOREBOARD (Tab)" or "[-] SCOREBOARD (Tab)"
+    local btnText = isCollapsed and "[+] SCOREBOARD" or "[-] SCOREBOARD"
     love.graphics.setColor(1, 0.85, 0.3, 1)
     love.graphics.printf(btnText, sbX, sbY + 8, sbWidth, "center")
 

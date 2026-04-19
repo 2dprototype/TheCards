@@ -288,7 +288,7 @@ function BlackJack.drawScoreboard(cx, cy, W, H)
     love.graphics.setColor(1, 1, 1, 0.1)
     love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 8)
 
-    local btnText = isCollapsed and "[+] SCOREBOARD (Tab)" or "[-] SCOREBOARD (Tab)"
+    local btnText = isCollapsed and "[+] SCOREBOARD" or "[-] SCOREBOARD"
     love.graphics.setColor(1, 0.85, 0.3, 1)
     love.graphics.printf(btnText, sbX, sbY + 8, sbWidth, "center")
 
@@ -323,7 +323,7 @@ function BlackJack.drawScoreboard(cx, cy, W, H)
             GameLogic.drawText("$" .. tostring(p.chips), sbX + colChips, scoreY, 60, "left", {0.8, 0.8, 0.8, 1})
             
             if p.currentBet > 0 then
-                GameLogic.drawText("[$" .. p.currentBet .. "]", sbX + colBet, scoreY, 60, "right", {0.4, 0.9, 0.4, 1})
+                GameLogic.drawText("$" .. p.currentBet, sbX + coBet, scoreY, 60, "right", {0.4, 0.9, 0.4, 1})
             else
                 GameLogic.drawText("-", sbX + colBet, scoreY, 60, "right", {0.4, 0.4, 0.4, 1})
             end

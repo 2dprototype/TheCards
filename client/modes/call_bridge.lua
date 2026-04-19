@@ -193,7 +193,7 @@ function CallBridge.drawScoreboard(cx, cy, W, H)
     love.graphics.setColor(1, 1, 1, 0.1)
     love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 8)
 
-    local btnText = isCollapsed and "[+] SCOREBOARD (Tab)" or "[-] SCOREBOARD (Tab)"
+    local btnText = isCollapsed and "[+] SCOREBOARD" or "[-] SCOREBOARD"
     love.graphics.setColor(1, 0.85, 0.3, 1)
     love.graphics.printf(btnText, sbX, sbY + 8, sbWidth, "center")
 

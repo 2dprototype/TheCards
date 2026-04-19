@@ -818,16 +818,14 @@ function GameLogic.draw()
 
     -- 1. Match Info (Top-Left)
     love.graphics.setColor(0.05, 0.05, 0.1, 0.8)
-    love.graphics.rectangle("fill", 15, 15, 200, 80, 10)
-    love.graphics.setColor(1, 1, 1, 0.1)
-    love.graphics.rectangle("line", 15, 15, 200, 80, 10)
+    love.graphics.rectangle("fill", 15, 15, 280, 80, 10)
 
-    GameLogic.drawText("Round: " .. GameLogic.roundNum .. "/" .. (GameLogic.totalRounds or 5), 25, 25, 180, "left", {0.9, 0.9, 0.9, 1})
-    GameLogic.drawText("Phase: " .. GameLogic.phase, 25, 45, 180, "left", {0.8, 0.8, 0.8, 1})
+    GameLogic.drawText("Round: " .. GameLogic.roundNum .. "/" .. (GameLogic.totalRounds or 5), 25, 25, 260, "left", {0.9, 0.9, 0.9, 1})
+    GameLogic.drawText(GameLogic.phase, 25, 45, 260, "left", {0.8, 0.8, 0.8, 1})
 
     if GameLogic.turnTimer and GameLogic.turnTimer > 0 and GameLogic.phase ~= "ROUND_OVER" and GameLogic.phase ~= "MATCH_OVER" then
         local tColor = GameLogic.turnTimer <= 5 and {1, 0.4, 0.4, 1} or {0.4, 0.9, 1, 1}
-        GameLogic.drawText("Time: " .. math.ceil(GameLogic.turnTimer) .. "s", 25, 65, 180, "left", tColor)
+        GameLogic.drawText("Time: " .. math.ceil(GameLogic.turnTimer) .. "s", 25, 65, 260, "left", tColor)
     end
 
     -- 2. Scoreboard (Mode Specific)
