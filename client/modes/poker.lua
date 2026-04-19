@@ -118,6 +118,14 @@ function Poker.handleAction(playerIdx, action, amount)
         p.currentBet = p.currentBet + toAdd
         Poker.pot = Poker.pot + toAdd
         Poker.currentBetToMatch = p.currentBet
+    elseif action == "ALL_IN" then
+        local toAdd = p.chips
+        p.chips = 0
+        p.currentBet = p.currentBet + toAdd
+        Poker.pot = Poker.pot + toAdd
+        if p.currentBet > Poker.currentBetToMatch then
+            Poker.currentBetToMatch = p.currentBet
+        end
     end
     Poker.playersActedThisRound = Poker.playersActedThisRound + 1
     Poker.advanceTurn()
@@ -398,9 +406,11 @@ function Poker.update(dt)
 end
 
 local chipColors = {
+    {val=5000, col={0.90, 0.40, 0.20, 1}}, -- Burnt Orange/Brown (high roller)
     {val=1000, col={0.95, 0.75, 0.10, 1}}, -- Electric Yellow/Gold
     {val=500,  col={0.60, 0.20, 0.70, 1}}, -- Vibrant Purple
-    {val=100,  col={0.10, 0.10, 0.12, 1}}, -- Rich Black (slightly softened)
+    {val=100,  col={0.10, 0.10, 0.12, 1}}, -- Rich Black
+    {val=69,   col={0.95, 0.50, 0.75, 1}}, -- Hot Pink
     {val=50,   col={0.00, 0.45, 0.80, 1}}, -- Electric Blue
     {val=25,   col={0.05, 0.65, 0.15, 1}}, -- Emerald Green
     {val=10,   col={0.95, 0.50, 0.00, 1}}, -- Bright Orange
@@ -421,7 +431,7 @@ local function drawChipStack(amount, x, y)
     local currentStackIndex = 0
 
     if stackTotal < 1 then return end
-    
+
     for _, cv in ipairs(chipColors) do
         -- Calculate how many chips of this specific color we need
         local num = math.floor(stackTotal / cv.val)
@@ -529,11 +539,11 @@ end
 function Poker.drawCallingUI(cx, cy, W, H)
     -- Draw Action Buttons safely above local hand
     if string.match(GameLogic.phase, "BETTING") and GameLogic.currentPlayer == GameLogic.myPlayerIdx and not GameLogic.players[GameLogic.myPlayerIdx].isBot then
-        local btnWidth = 100
+        local btnWidth = 80
         local btnHeight = 40
-        local gap = 20
-        -- Total width = (100*3) + (20*2) = 340. Half is 170.
-        local startX = cx - 170 
+        local gap = 15
+        -- Total width = (80*4) + (15*3) = 365. Half is 182.
+        local startX = cx - 182 
         local startY = H - 180 -- Safely above bottom player's hand
         
         local p = GameLogic.players[GameLogic.myPlayerIdx]
@@ -554,6 +564,11 @@ function Poker.drawCallingUI(cx, cy, W, H)
         love.graphics.setColor(0.2, 0.4, 0.8, 1)
         love.graphics.rectangle("fill", startX + (btnWidth + gap) * 2, startY, btnWidth, btnHeight, 8)
         GameLogic.drawText("RAISE $20", startX + (btnWidth + gap) * 2, startY + 10, btnWidth, "center")
+
+        -- ALL IN
+        love.graphics.setColor(0.9, 0.6, 0.1, 1)
+        love.graphics.rectangle("fill", startX + (btnWidth + gap) * 3, startY, btnWidth, btnHeight, 8)
+        GameLogic.drawText("ALL IN", startX + (btnWidth + gap) * 3, startY + 10, btnWidth, "center")
     end
     
     -- Draw Community Cards
@@ -576,17 +591,23 @@ function Poker.drawCallingUI(cx, cy, W, H)
         -- 1. Draw Total Bankroll (Available Money Stacks)
         if (p.visChips or 0) >= 1 then
             local bankX, bankY
-            if i == GameLogic.myPlayerIdx then
-                -- Place local player bankroll completely to the left
-                bankX = 300
-                bankY = H - 100
-            else
-                local isRightSide = px > cx
-                bankX = isRightSide and (px - 100) or (px + 100)
-                bankY = py + 15
+            local rel = (i - GameLogic.myPlayerIdx) % 4
+            
+            if rel == 0 then -- BOTTOM
+                bankX = cx + 220
+                bankY = H - 120
+            elseif rel == 1 then -- LEFT
+                bankX = 140
+                bankY = cy - 100
+            elseif rel == 2 then -- TOP
+                bankX = cx - 220
+                bankY = 140
+            elseif rel == 3 then -- RIGHT
+                bankX = W - 140
+                bankY = cy + 100
             end
             
-            drawChipStack(p.visChips, bankX, bankY, not (px > cx))
+            drawChipStack(p.visChips, bankX, bankY)
             
             -- Optional label under the bankroll stack
             -- GameLogic.drawText("$"..math.floor(p.visChips), bankX - 30, bankY + 10, 60, "center", {0.8, 0.8, 0.8, 1})
@@ -633,10 +654,10 @@ function Poker.mousepressed(x, y, button)
     local cx, cy = W / 2, H / 2
     
     if string.match(GameLogic.phase, "BETTING") and GameLogic.currentPlayer == GameLogic.myPlayerIdx then
-        local btnWidth = 100
+        local btnWidth = 80
         local btnHeight = 40
-        local gap = 20
-        local startX = cx - 170
+        local gap = 15
+        local startX = cx - 182
         local startY = H - 180 -- Updated to match the new drawing Y
         
         if x >= startX and x <= startX + btnWidth and y >= startY and y <= startY + btnHeight then
@@ -651,6 +672,10 @@ function Poker.mousepressed(x, y, button)
             -- RAISE
             if GameLogic.mode == "GUEST" then require("network").sendGameMessage("host", {action="POKER_ACTION", type="RAISE", amount=20})
             else Poker.handleAction(GameLogic.myPlayerIdx, "RAISE", 20) end
+        elseif x >= startX + (btnWidth + gap)*3 and x <= startX + (btnWidth + gap)*3 + btnWidth and y >= startY and y <= startY + btnHeight then
+            -- ALL IN
+            if GameLogic.mode == "GUEST" then require("network").sendGameMessage("host", {action="POKER_ACTION", type="ALL_IN"})
+            else Poker.handleAction(GameLogic.myPlayerIdx, "ALL_IN") end
         end
     end
 end

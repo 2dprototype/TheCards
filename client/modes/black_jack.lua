@@ -95,6 +95,12 @@ function BlackJack.handleAction(playerIdx, action, betAmount)
                 p.chips = p.chips - toBet
                 p.currentBet = p.currentBet + toBet
             end
+        elseif action == "ALL_IN" then
+            local toBet = p.chips
+            if toBet > 0 then
+                p.chips = 0
+                p.currentBet = p.currentBet + toBet
+            end
         end
         -- If all have bet > 0 (or have 0 chips), start dealing
         local allBet = true
@@ -336,14 +342,21 @@ function BlackJack.drawCallingUI(cx, cy, W, H)
     -- User Actions Panel
     if GameLogic.currentPlayer == GameLogic.myPlayerIdx and not GameLogic.players[GameLogic.myPlayerIdx].isBot then
         local p = GameLogic.players[GameLogic.myPlayerIdx]
-        local startX = cx - 100
         local startY = cy + 50
         
         if GameLogic.phase == "BETTING" and p.currentBet == 0 then
+            local startX = cx - 110
+            
             love.graphics.setColor(0.3, 0.8, 0.3, 1)
-            love.graphics.rectangle("fill", startX + 50, startY, 100, 40, 8)
-            GameLogic.drawText("BET $50", startX + 50, startY + 10, 100, "center")
+            love.graphics.rectangle("fill", startX, startY, 100, 40, 8)
+            GameLogic.drawText("BET $50", startX, startY + 10, 100, "center")
+            
+            love.graphics.setColor(0.9, 0.6, 0.1, 1)
+            love.graphics.rectangle("fill", startX + 120, startY, 100, 40, 8)
+            GameLogic.drawText("ALL IN", startX + 120, startY + 10, 100, "center")
         elseif GameLogic.phase == "PLAYER_TURNS" and not p.isStood and not p.isBusted then
+            local startX = cx - 100
+            
             love.graphics.setColor(0.8, 0.2, 0.2, 1)
             love.graphics.rectangle("fill", startX, startY, 80, 40, 8)
             GameLogic.drawText("HIT", startX, startY + 10, 80, "center")
@@ -358,20 +371,24 @@ end
 function BlackJack.mousepressed(x, y, button)
     local cx, cy = _G.getW() / 2, _G.getH() / 2
     local p = GameLogic.players[GameLogic.myPlayerIdx]
-    local startX = cx - 100
     local startY = cy + 50
     
     if GameLogic.currentPlayer == GameLogic.myPlayerIdx and not p.isBot then
         if GameLogic.phase == "BETTING" and p.currentBet == 0 then
-            if x >= startX + 50 and x <= startX + 150 and y >= startY and y <= startY + 40 then
+            local startX = cx - 110
+            if x >= startX and x <= startX + 100 and y >= startY and y <= startY + 40 then
                 if GameLogic.mode == "GUEST" then require("network").sendGameMessage("host", {action="BLACKJACK_ACTION", type="BET", amount=50})
                 else BlackJack.handleAction(GameLogic.myPlayerIdx, "BET", 50) end
+            elseif x >= startX + 120 and x <= startX + 220 and y >= startY and y <= startY + 40 then
+                if GameLogic.mode == "GUEST" then require("network").sendGameMessage("host", {action="BLACKJACK_ACTION", type="ALL_IN"})
+                else BlackJack.handleAction(GameLogic.myPlayerIdx, "ALL_IN") end
             end
         elseif GameLogic.phase == "PLAYER_TURNS" and not p.isStood and not p.isBusted then
-            if x >= startX and x <= startX + 80 and y >= startY and y <= startY + 40 then
+            local playStartX = cx - 100
+            if x >= playStartX and x <= playStartX + 80 and y >= startY and y <= startY + 40 then
                 if GameLogic.mode == "GUEST" then require("network").sendGameMessage("host", {action="BLACKJACK_ACTION", type="HIT"})
                 else BlackJack.handleAction(GameLogic.myPlayerIdx, "HIT") end
-            elseif x >= startX + 120 and x <= startX + 200 and y >= startY and y <= startY + 40 then
+            elseif x >= playStartX + 120 and x <= playStartX + 200 and y >= startY and y <= startY + 40 then
                 if GameLogic.mode == "GUEST" then require("network").sendGameMessage("host", {action="BLACKJACK_ACTION", type="STAND"})
                 else BlackJack.handleAction(GameLogic.myPlayerIdx, "STAND") end
             end
