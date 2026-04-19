@@ -494,46 +494,75 @@ local function drawChipStack(amount, x, y)
 end
 
 function Poker.drawScoreboard(cx, cy, W, H)
-    -- Increased width and height to prevent squishing
-    local sbWidth = 340
-    local sbHeight = 80 + (4 * 35)
-    local sbX = W - sbWidth - 20
-    local sbY = 20
-
-    -- Background
-    love.graphics.setColor(0.05, 0.05, 0.1, 0.85)
-    love.graphics.rectangle("fill", sbX, sbY, sbWidth, sbHeight, 10)
-    love.graphics.setColor(1, 1, 1, 0.15)
-    love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 10)
-
-    -- Header
-    GameLogic.drawText("SCOREBOARD", sbX, sbY + 12, sbWidth, "center", {1, 0.85, 0.3, 1})
-    
-    -- Entries
-    local scoreY = sbY + 50
-    for i=1, 4 do
-        local p = GameLogic.players[i]
-        local pColor = p.folded and {0.5, 0.5, 0.5, 1} or {1, 1, 1, 1}
-        -- local nameStr = (i == Poker.dealerIdx and "[D] " or "") .. p.name
-        
-        -- Strict columns prevent text overlap
-        GameLogic.drawText(p.name, sbX + 15, scoreY, 130, "left", pColor)
-        GameLogic.drawText("$" .. tostring(p.chips), sbX + 150, scoreY, 80, "left", {0.8, 0.8, 0.8, 1})
-        
-        if p.folded then
-            GameLogic.drawText("FOLD", sbX + 230, scoreY, 95, "right", {0.8, 0.3, 0.3, 1})
-        elseif p.currentBet > 0 then
-            GameLogic.drawText("$" .. p.currentBet, sbX + 230, scoreY, 95, "right", {0.4, 0.9, 0.4, 1})
-        else
-            GameLogic.drawText("-", sbX + 230, scoreY, 95, "right", {0.4, 0.4, 0.4, 1})
-        end
-        scoreY = scoreY + 35
+    if not GameLogic.sbFont then
+        local currentSize = love.graphics.getFont():getHeight()
+        GameLogic.sbFont = love.graphics.newFont(math.max(10, math.floor(currentSize * 0.85)))
     end
-    
-    -- Pot Section
-    -- GameLogic.drawText("POT: $" .. Poker.pot, sbX + 15, scoreY + 20, sbWidth - 30, "center", {1, 0.85, 0.2, 1})
-    GameLogic.drawText("POT", sbX + 15, scoreY, sbWidth - 30, "left", {1, 0.85, 0.2, 1})
-    GameLogic.drawText("$" .. Poker.pot, sbX + 230, scoreY, 95, "right", {1, 0.85, 0.2, 1})
+    local oldFont = love.graphics.getFont()
+    love.graphics.setFont(GameLogic.sbFont)
+
+    local isCollapsed = GameLogic.isScoreboardCollapsed
+
+    local sbWidth = 260
+    local sbHeight = isCollapsed and 30 or (60 + (4 * 24) + 24)
+    local sbX = W - sbWidth - 15
+    local sbY = 15
+
+    love.graphics.setColor(0.05, 0.05, 0.1, 0.75)
+    love.graphics.rectangle("fill", sbX, sbY, sbWidth, sbHeight, 8)
+    love.graphics.setColor(1, 1, 1, 0.1)
+    love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 8)
+
+    local btnText = isCollapsed and "[+] SCOREBOARD (Tab)" or "[-] SCOREBOARD (Tab)"
+    love.graphics.setColor(1, 0.85, 0.3, 1)
+    love.graphics.printf(btnText, sbX, sbY + 8, sbWidth, "center")
+
+    if not isCollapsed then
+        local colName = 10
+        local colChips = 130
+        local colBet = 190
+
+        local labelY = sbY + 28
+        local labelColor = {0.6, 0.6, 0.6, 1}
+        GameLogic.drawText("Player", sbX + colName, labelY, 110, "left", labelColor)
+        GameLogic.drawText("Chips",  sbX + colChips, labelY, 50, "left", labelColor)
+        GameLogic.drawText("Bet",    sbX + colBet, labelY, 60, "right", labelColor)
+
+        love.graphics.setColor(1, 1, 1, 0.1)
+        love.graphics.line(sbX + 10, sbY + 45, sbX + sbWidth - 10, sbY + 45)
+
+        local scoreY = sbY + 52
+        for i = 1, 4 do
+            local p = GameLogic.players[i]
+            local isCurrent = (i == GameLogic.currentPlayer and not string.match(GameLogic.phase, "ROUND_OVER"))
+            if isCurrent then
+                love.graphics.setColor(1, 1, 1, 0.05)
+                love.graphics.rectangle("fill", sbX + 5, scoreY - 2, sbWidth - 10, 20, 4)
+            end
+            
+            local pColor = p.folded and {0.5, 0.5, 0.5, 1} or (isCurrent and {0.3, 0.95, 0.4, 1} or {1, 1, 1, 1})
+            
+            GameLogic.drawTruncatedText(p.name, sbX + colName, scoreY, colChips - colName - 5, "left", pColor)
+            GameLogic.drawText("$" .. tostring(p.chips), sbX + colChips, scoreY, 60, "left", {0.8, 0.8, 0.8, 1})
+            
+            if p.folded then
+                GameLogic.drawText("FOLD", sbX + colBet, scoreY, 60, "right", {0.8, 0.3, 0.3, 1})
+            elseif p.currentBet > 0 then
+                GameLogic.drawText("$" .. p.currentBet, sbX + colBet, scoreY, 60, "right", {0.4, 0.9, 0.4, 1})
+            else
+                GameLogic.drawText("-", sbX + colBet, scoreY, 60, "right", {0.4, 0.4, 0.4, 1})
+            end
+            scoreY = scoreY + 24
+        end
+        
+        love.graphics.setColor(1, 1, 1, 0.1)
+        love.graphics.line(sbX + 10, scoreY, sbX + sbWidth - 10, scoreY)
+        scoreY = scoreY + 5
+        GameLogic.drawText("POT", sbX + colName, scoreY, 100, "left", {1, 0.85, 0.2, 1})
+        GameLogic.drawText("$" .. Poker.pot, sbX + colBet, scoreY, 60, "right", {1, 0.85, 0.2, 1})
+    end
+
+    love.graphics.setFont(oldFont)
 end
 
 function Poker.drawCallingUI(cx, cy, W, H)
@@ -652,6 +681,14 @@ end
 function Poker.mousepressed(x, y, button)
     local W, H = _G.getW(), _G.getH()
     local cx, cy = W / 2, H / 2
+    
+    local sbWidth = 260
+    local sbX = W - sbWidth - 15
+    local sbY = 15
+    if x >= sbX and x <= sbX + sbWidth and y >= sbY and y <= sbY + 30 then
+        GameLogic.isScoreboardCollapsed = not GameLogic.isScoreboardCollapsed
+        return
+    end
     
     if string.match(GameLogic.phase, "BETTING") and GameLogic.currentPlayer == GameLogic.myPlayerIdx then
         local btnWidth = 80

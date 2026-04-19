@@ -65,6 +65,8 @@ GameLogic.trickLeadSuit = nil
 GameLogic.roundNum = 1
 GameLogic.turnTimer = 0
 
+GameLogic.isScoreboardCollapsed = false
+
 function GameLogic.load()
     math.randomseed(os.time())
     GameLogic.loadCardSprites(GameLogic.currentDeckPackIdx)
@@ -572,6 +574,26 @@ end
 function GameLogic.drawText(text, x, y, w, align, color)
     love.graphics.setColor(color or {1, 1, 1, 1})
     love.graphics.printf(text, x, y, w, align)
+end
+
+function GameLogic.drawTruncatedText(text, x, y, maxW, align, color)
+    love.graphics.setColor(color or {1, 1, 1, 1})
+    local font = love.graphics.getFont()
+    if font:getWidth(text) > maxW then
+        local truncated = text
+        while string.len(truncated) > 0 and font:getWidth(truncated .. "(..)") > maxW do
+            truncated = string.sub(truncated, 1, -2)
+        end
+        text = truncated .. "(..)"
+    end
+    -- Still draw via printf to use alignment within the cell width
+    love.graphics.printf(text, x, y, maxW, align)
+end
+
+function GameLogic.keypressed(key)
+    if key == "tab" then
+        GameLogic.isScoreboardCollapsed = not GameLogic.isScoreboardCollapsed
+    end
 end
 
 function GameLogic.draw()

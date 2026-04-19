@@ -417,6 +417,8 @@ function love.keypressed(key)
                 setupPauseUI()
             end
         end
+    elseif appState == "GAME" and not _G.inPauseMenu and GameLogic.phase ~= "MATCH_OVER" then
+        if GameLogic.keypressed then GameLogic.keypressed(key) end
     end
 end
 

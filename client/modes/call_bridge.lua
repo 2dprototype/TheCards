@@ -175,48 +175,62 @@ function CallBridge.update(dt)
 end
 
 function CallBridge.drawScoreboard(cx, cy, W, H)
-    local sbWidth = 280
-    local sbHeight = 80 + (4 * 30)
+    if not GameLogic.sbFont then
+        local currentSize = love.graphics.getFont():getHeight()
+        GameLogic.sbFont = love.graphics.newFont(math.max(10, math.floor(currentSize * 0.85)))
+    end
+    local oldFont = love.graphics.getFont()
+    love.graphics.setFont(GameLogic.sbFont)
+
+    local isCollapsed = GameLogic.isScoreboardCollapsed
+    local sbWidth = 240
+    local sbHeight = isCollapsed and 30 or (60 + (4 * 24))
     local sbX = W - sbWidth - 15
     local sbY = 15
 
     love.graphics.setColor(0.05, 0.05, 0.1, 0.75)
-    love.graphics.rectangle("fill", sbX, sbY, sbWidth, sbHeight, 10)
+    love.graphics.rectangle("fill", sbX, sbY, sbWidth, sbHeight, 8)
     love.graphics.setColor(1, 1, 1, 0.1)
-    love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 10)
+    love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 8)
 
-    GameLogic.drawText("SCOREBOARD", sbX, sbY + 12, sbWidth, "center", {1, 0.85, 0.3, 1})
+    local btnText = isCollapsed and "[+] SCOREBOARD (Tab)" or "[-] SCOREBOARD (Tab)"
+    love.graphics.setColor(1, 0.85, 0.3, 1)
+    love.graphics.printf(btnText, sbX, sbY + 8, sbWidth, "center")
 
-    local colName  = 15
-    local colCall  = 130
-    local colTrick = 180
-    local colScore = 230
+    if not isCollapsed then
+        local colName  = 10
+        local colCall  = 110
+        local colTrick = 150
+        local colScore = 190
 
-    local labelY = sbY + 35
-    local labelColor = {0.6, 0.6, 0.6, 1}
-    GameLogic.drawText("Player", sbX + colName, labelY, 100, "left", labelColor)
-    GameLogic.drawText("C",      sbX + colCall, labelY, 40,  "center", labelColor)
-    GameLogic.drawText("T",      sbX + colTrick, labelY, 40, "center", labelColor)
-    GameLogic.drawText("Pts",    sbX + colScore, labelY, 40, "right", labelColor)
+        local labelY = sbY + 28
+        local labelColor = {0.6, 0.6, 0.6, 1}
+        GameLogic.drawText("Player", sbX + colName, labelY, 90, "left", labelColor)
+        GameLogic.drawText("C",      sbX + colCall, labelY, 35,  "center", labelColor)
+        GameLogic.drawText("T",      sbX + colTrick, labelY, 35, "center", labelColor)
+        GameLogic.drawText("Pts",    sbX + colScore, labelY, 40, "right", labelColor)
 
-    love.graphics.setColor(1, 1, 1, 0.1)
-    love.graphics.line(sbX + 10, sbY + 55, sbX + sbWidth - 10, sbY + 55)
+        love.graphics.setColor(1, 1, 1, 0.1)
+        love.graphics.line(sbX + 10, sbY + 45, sbX + sbWidth - 10, sbY + 45)
 
-    local scoreY = sbY + 65
-    for i = 1, 4 do
-        local p = GameLogic.players[i]
-        local isCurrent = (i == GameLogic.currentPlayer)
-        if isCurrent then
-            love.graphics.setColor(1, 1, 1, 0.05)
-            love.graphics.rectangle("fill", sbX + 5, scoreY - 5, sbWidth - 10, 25, 4)
+        local scoreY = sbY + 52
+        for i = 1, 4 do
+            local p = GameLogic.players[i]
+            local isCurrent = (i == GameLogic.currentPlayer)
+            if isCurrent then
+                love.graphics.setColor(1, 1, 1, 0.05)
+                love.graphics.rectangle("fill", sbX + 5, scoreY - 2, sbWidth - 10, 20, 4)
+            end
+            local pColor = isCurrent and {0.3, 0.95, 0.4, 1} or {0.95, 0.95, 0.95, 1}
+            GameLogic.drawTruncatedText(p.name, sbX + colName, scoreY, colCall - colName - 5, "left", pColor)
+            GameLogic.drawText(tostring(p.call or 0), sbX + colCall, scoreY, 35, "center", pColor)
+            GameLogic.drawText(tostring(p.tricksWon or 0), sbX + colTrick, scoreY, 35, "center", pColor)
+            GameLogic.drawText(string.format("%.1f", p.score or 0), sbX + colScore, scoreY, 40, "right", pColor)
+            scoreY = scoreY + 24
         end
-        local pColor = isCurrent and {0.3, 0.95, 0.4, 1} or {0.95, 0.95, 0.95, 1}
-        GameLogic.drawText(p.name, sbX + colName, scoreY, colCall - colName - 5, "left", pColor)
-        GameLogic.drawText(tostring(p.call or 0), sbX + colCall, scoreY, 40, "center", pColor)
-        GameLogic.drawText(tostring(p.tricksWon or 0), sbX + colTrick, scoreY, 40, "center", pColor)
-        GameLogic.drawText(string.format("%.1f", p.score or 0), sbX + colScore, scoreY, 40, "right", pColor)
-        scoreY = scoreY + 30
     end
+
+    love.graphics.setFont(oldFont)
 end
 
 function CallBridge.drawCallingUI(cx, cy, W, H)
@@ -251,6 +265,15 @@ end
 
 function CallBridge.mousepressed(x, y, button)
     local cx, cy = _G.getW() / 2, _G.getH() / 2
+    local W = _G.getW()
+    local sbWidth = 240
+    local sbX = W - sbWidth - 15
+    local sbY = 15
+    if x >= sbX and x <= sbX + sbWidth and y >= sbY and y <= sbY + 30 then
+        GameLogic.isScoreboardCollapsed = not GameLogic.isScoreboardCollapsed
+        return
+    end
+
     if GameLogic.phase == "CALLING" and GameLogic.currentPlayer == GameLogic.myPlayerIdx and not GameLogic.players[GameLogic.currentPlayer].isBot then
         local boxW = 8 * 55
         local startX = cx - (boxW / 2)
