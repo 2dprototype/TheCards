@@ -304,7 +304,7 @@ function GameLogic.update(dt)
     end
     
     -- Visual Animations
-    local lerpSpeed = 12
+    local lerpSpeed = GameLogic.currentModeName == "old_maid" and 3 or 12
     local cx, cy = _G.getW() / 2, _G.getH() / 2
     
     -- Trick Cards
@@ -734,19 +734,19 @@ function GameLogic.draw()
         -- Draw Hand Backs for Opponents Beautifully fanned out
         local hSize = p.handSize or (p.hand and #p.hand) or 0
         if (pos ~= "BOTTOM") and hSize > 0 then
-            local rotStep = 0.1
+            local rotStep = GameLogic.currentModeName == "old_maid" and 0 or 0.1
             local totalArc = (hSize - 1) * rotStep
             local startRot = -totalArc / 2
             
             for j = 1, hSize do 
                 local offset = (j - hSize/2) * 12
-                local rx, ry, rz = lx, ly, startRot + ((j-1) * rotStep)
+                local rz = startRot + ((j-1) * rotStep)
                 if pos == "LEFT" then 
                     GameLogic.drawCardBack(140, cy + offset, math.pi/2 + rz)
                 elseif pos == "TOP" then 
                     GameLogic.drawCardBack(cx - offset, 140, rz)
                 elseif pos == "RIGHT" then 
-                    GameLogic.drawCardBack(_G.getW() - 140, cy - offset, math.pi/2 + rz) 
+                    GameLogic.drawCardBack(_G.getW() - 140, cy - offset, -math.pi/2 + rz) 
                 elseif pos == "BOTTOM" then
                     GameLogic.drawCardBack(cx + offset, _G.getH() - 140, rz)
                 end
@@ -770,7 +770,15 @@ function GameLogic.draw()
 
     -- 6. Draw Trick Cards (Flying and Placed)
     for _, f in ipairs(GameLogic.flyingCards) do
-        GameLogic.drawCard(f.card, f.card.visX, f.card.visY, true)
+        if GameLogic.currentModeName == "old_maid" and f.targetId ~= "CENTER" and f.sourceId then
+            if f.sourceId == GameLogic.myPlayerIdx or f.targetId == GameLogic.myPlayerIdx then
+                GameLogic.drawCard(f.card, f.card.visX, f.card.visY, true)
+            else
+                GameLogic.drawCardBack(f.card.visX + CARD_W/2, f.card.visY + CARD_H/2, 0)
+            end
+        else
+            GameLogic.drawCard(f.card, f.card.visX, f.card.visY, true)
+        end
     end
 
     for _, t in ipairs(GameLogic.trick) do
