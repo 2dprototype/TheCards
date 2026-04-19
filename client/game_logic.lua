@@ -28,6 +28,9 @@ end
 
 function GameLogic.getPlayerAnchor(i)
     local cx, cy = _G.getW() / 2, _G.getH() / 2
+    if type(i) == "string" and i == "CENTER" then
+        return cx, cy
+    end
     local pos = getRelativePos(i)
     if pos == "BOTTOM" then return cx, _G.getH() - 50
     elseif pos == "LEFT" then return -50, cy
@@ -822,6 +825,9 @@ function GameLogic.loadCardSprites(packIdx)
     
     local s2, bImg = pcall(love.graphics.newImage, backFile)
     if s2 then cardBackSheet = bImg else print("Failed to load back:", backFile) end
+
+    local s3, jImg = pcall(love.graphics.newImage, "assets/joker.png")
+    if s3 then GameLogic.jokerImg = jImg else print("Failed to load joker: assets/joker.png") end
     
     if not cardSheet then return end
     cardQuads = {}
@@ -853,7 +859,11 @@ function GameLogic.drawCard(card, x, y, valid)
         love.graphics.setColor(1, 1, 1, 1) -- White (no tint)
     end
     
-    if cardSheet and cardQuads[card.suit] and cardQuads[card.suit][card.rank] then
+    if card.suit == "JOKER" and GameLogic.jokerImg then
+        local scaleX = CARD_W / GameLogic.jokerImg:getWidth()
+        local scaleY = CARD_H / GameLogic.jokerImg:getHeight()
+        love.graphics.draw(GameLogic.jokerImg, x, y, 0, scaleX, scaleY)
+    elseif cardSheet and cardQuads[card.suit] and cardQuads[card.suit][card.rank] then
         local scaleX = CARD_W / SPRITE_W
         local scaleY = CARD_H / SPRITE_H
         love.graphics.draw(cardSheet, cardQuads[card.suit][card.rank], x, y, 0, scaleX, scaleY)
