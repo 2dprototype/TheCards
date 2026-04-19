@@ -34,18 +34,17 @@ function Poker.startRound()
     GameLogic.shuffle(deck)
     Poker.deck = deck
     
-    -- Deal 2 cards each
+    GameLogic.flyingCards = {}
+    Poker.pendingDeals = {{}, {}, {}, {}}
+    
+    -- Deal 2 cards each using physical flying cards from center
     for i=1, 8 do
         local pIdx = ((i - 1) % 4) + 1
-        table.insert(GameLogic.players[pIdx].hand, table.remove(deck))
-    end
-    
-    for i=1, 4 do
-        for _, c in ipairs(GameLogic.players[i].hand) do
-            local startX, startY = GameLogic.getPlayerAnchor(1)
-            c.visX = startX
-            c.visY = startY
-        end
+        local c = table.remove(deck)
+        c.visX = _G.getW() / 2
+        c.visY = _G.getH() / 2
+        table.insert(GameLogic.flyingCards, { card = c, targetId = pIdx })
+        table.insert(Poker.pendingDeals[pIdx], c)
     end
     
     -- If 1 or 0 players have chips, match is over!
@@ -92,10 +91,11 @@ function Poker.startRound()
     Poker.pot = sbAmount + bbAmount
     Poker.currentBetToMatch = math.max(sbAmount, bbAmount)
     
-    GameLogic.phase = "BETTING_PREFLOP"
+    GameLogic.phase = "DEAL_ANIMATION"
     GameLogic.currentPlayer = (bbIdx % 4) + 1
-    GameLogic.turnTimer = GameLogic.maxTurnTime or 15
+    GameLogic.turnTimer = 1.2
     Poker.playersActedThisRound = 0
+    Poker.showdownResults = nil
     
     GameLogic.syncState()
 end
@@ -168,29 +168,28 @@ function Poker.advanceTurn()
         Poker.playersActedThisRound = 0
         
         if GameLogic.phase == "BETTING_PREFLOP" then
-            GameLogic.phase = "FLOP"
+            GameLogic.phase = "FLOP_ANIMATION"
+            GameLogic.turnTimer = 0.8
             for i=1, 3 do 
                 local c = table.remove(Poker.deck)
                 c.visX = _G.getW() / 2
-                c.visY = -100
+                c.visY = -200 - (i*50) -- staggered spawn
                 table.insert(Poker.communityCards, c)
             end
-            GameLogic.phase = "BETTING_FLOP"
-            GameLogic.currentPlayer = (Poker.dealerIdx % 4) + 1
         elseif GameLogic.phase == "BETTING_FLOP" then
+            GameLogic.phase = "TURN_ANIMATION"
+            GameLogic.turnTimer = 0.5
             local c = table.remove(Poker.deck)
             c.visX = _G.getW() / 2
-            c.visY = -100
+            c.visY = -200
             table.insert(Poker.communityCards, c)
-            GameLogic.phase = "BETTING_TURN"
-            GameLogic.currentPlayer = (Poker.dealerIdx % 4) + 1
         elseif GameLogic.phase == "BETTING_TURN" then
+            GameLogic.phase = "RIVER_ANIMATION"
+            GameLogic.turnTimer = 0.5
             local c = table.remove(Poker.deck)
             c.visX = _G.getW() / 2
-            c.visY = -100
+            c.visY = -200
             table.insert(Poker.communityCards, c)
-            GameLogic.phase = "BETTING_RIVER"
-            GameLogic.currentPlayer = (Poker.dealerIdx % 4) + 1
         elseif GameLogic.phase == "BETTING_RIVER" then
             GameLogic.phase = "SHOWDOWN"
             Poker.evaluateShowdown()
@@ -261,15 +260,15 @@ local function getHandScore(hand5)
         return a.count > b.count
     end)
     
-    local typeRank = 0
-    if isStraight and isFlush then typeRank = 8
-    elseif groups[1].count == 4 then typeRank = 7
-    elseif groups[1].count == 3 and groups[2].count == 2 then typeRank = 6
-    elseif isFlush then typeRank = 5
-    elseif isStraight then typeRank = 4
-    elseif groups[1].count == 3 then typeRank = 3
-    elseif groups[1].count == 2 and groups[2].count == 2 then typeRank = 2
-    elseif groups[1].count == 2 then typeRank = 1
+    local typeRank = 1
+    if isStraight and isFlush then typeRank = 9
+    elseif groups[1].count == 4 then typeRank = 8
+    elseif groups[1].count == 3 and groups[2].count == 2 then typeRank = 7
+    elseif isFlush then typeRank = 6
+    elseif isStraight then typeRank = 5
+    elseif groups[1].count == 3 then typeRank = 4
+    elseif groups[1].count == 2 and groups[2].count == 2 then typeRank = 3
+    elseif groups[1].count == 2 then typeRank = 2
     end
     
     local score = {typeRank}
@@ -312,6 +311,7 @@ end
 
 function Poker.evaluateShowdown()
     local bestScores = {}
+    local playerHandsMap = {}
     for i=1, 4 do
         local p = GameLogic.players[i]
         if not p.folded then
@@ -328,6 +328,7 @@ function Poker.evaluateShowdown()
                 end
             end
             bestScores[i] = {playerIdx=i, score=bestScore}
+            playerHandsMap[i] = {name=handRanks[bestScore[1]]}
         end
     end
     
@@ -343,14 +344,20 @@ function Poker.evaluateShowdown()
         end
     end
     
-    if #winners > 0 then
-        local winSplit = math.floor(Poker.pot / #winners)
-        for _, wIdx in ipairs(winners) do
-            GameLogic.players[wIdx].chips = GameLogic.players[wIdx].chips + winSplit
-        end
+    local wStr = #winners > 1 and "SPLIT POT (" or "WINNER ("
+    wStr = wStr .. (handRanks[highest[1]] or "High Card") .. "): "
+    for idx, wIdx in ipairs(winners) do
+        wStr = wStr .. GameLogic.players[wIdx].name
+        if idx < #winners then wStr = wStr .. ", " end
     end
-    Poker.pot = 0
-    GameLogic.phase = "ROUND_OVER"
+    
+    Poker.showdownResults = {
+        winners = winners,
+        playerHands = playerHandsMap,
+        winnerString = wStr
+    }
+    
+    GameLogic.turnTimer = 8.0
     GameLogic.syncState()
 end
 
@@ -371,6 +378,56 @@ function Poker.isBotTurn()
 end
 
 function Poker.update(dt)
+    if GameLogic.phase == "DEAL_ANIMATION" then
+        if GameLogic.turnTimer then
+            GameLogic.turnTimer = GameLogic.turnTimer - dt
+            if GameLogic.turnTimer <= 0 then
+                for i=1, 4 do
+                    if Poker.pendingDeals[i] then
+                        for _, c in ipairs(Poker.pendingDeals[i]) do
+                            table.insert(GameLogic.players[i].hand, c)
+                        end
+                    end
+                end
+                
+                GameLogic.phase = "BETTING_PREFLOP"
+                GameLogic.turnTimer = GameLogic.maxTurnTime or 15
+                GameLogic.syncState()
+            end
+        end
+    elseif GameLogic.phase == "FLOP_ANIMATION" or GameLogic.phase == "TURN_ANIMATION" or GameLogic.phase == "RIVER_ANIMATION" then
+        if GameLogic.turnTimer then
+            GameLogic.turnTimer = GameLogic.turnTimer - dt
+            if GameLogic.turnTimer <= 0 then
+                if GameLogic.phase == "FLOP_ANIMATION" then GameLogic.phase = "BETTING_FLOP"
+                elseif GameLogic.phase == "TURN_ANIMATION" then GameLogic.phase = "BETTING_TURN"
+                elseif GameLogic.phase == "RIVER_ANIMATION" then GameLogic.phase = "BETTING_RIVER" end
+                GameLogic.turnTimer = GameLogic.maxTurnTime or 15
+                GameLogic.currentPlayer = (Poker.dealerIdx % 4) + 1
+				local safeLoops = 0
+				while (GameLogic.players[GameLogic.currentPlayer].folded or GameLogic.players[GameLogic.currentPlayer].chips <= 0) and safeLoops < 4 do
+					GameLogic.currentPlayer = (GameLogic.currentPlayer % 4) + 1
+					safeLoops = safeLoops + 1
+				end
+                GameLogic.syncState()
+            end
+        end
+    elseif GameLogic.phase == "SHOWDOWN" then
+        if GameLogic.turnTimer then
+            GameLogic.turnTimer = GameLogic.turnTimer - dt
+            if GameLogic.turnTimer <= 0 then
+                if Poker.showdownResults and #Poker.showdownResults.winners > 0 then
+                    local winSplit = math.floor(Poker.pot / #Poker.showdownResults.winners)
+                    for _, wIdx in ipairs(Poker.showdownResults.winners) do
+                        GameLogic.players[wIdx].chips = GameLogic.players[wIdx].chips + winSplit
+                    end
+                end
+                Poker.pot = 0
+                GameLogic.phase = "ROUND_OVER"
+                GameLogic.syncState()
+            end
+        end
+    end
     -- Card sliding animations
     if Poker.communityCards then
         local cx = _G.getW() / 2
@@ -566,6 +623,29 @@ function Poker.drawScoreboard(cx, cy, W, H)
 end
 
 function Poker.drawCallingUI(cx, cy, W, H)
+    if GameLogic.phase == "SHOWDOWN" and Poker.showdownResults then
+        love.graphics.setColor(0, 0, 0, 0.45)
+        love.graphics.rectangle("fill", 0, 0, W, H)
+        GameLogic.drawText("SHOWDOWN!", 0, H/2 - 140, W, "center", {1, 0.85, 0.2, 1})
+        for i=1, 4 do
+            local res = Poker.showdownResults.playerHands[i]
+            if res then
+                local px, py = GameLogic.getPlayerAnchor(i)
+                local rel = (i - GameLogic.myPlayerIdx) % 4
+                local tx, ty = px, py
+                if rel == 1 then tx = 140; ty = cy - 40
+                elseif rel == 2 then tx = cx; ty = 140 + 40
+                elseif rel == 3 then tx = W - 140; ty = cy - 40
+                elseif rel == 0 then tx = cx; ty = H - 140 - 80 end
+                
+                GameLogic.drawText(res.name, tx - 100, ty - 60, 200, "center", {1, 1, 1, 1})
+            end
+        end
+        if Poker.showdownResults.winnerString then
+            GameLogic.drawText(Poker.showdownResults.winnerString, 0, H/2 - 100, W, "center", {0.3, 0.95, 0.4, 1})
+        end
+    end
+    
     -- Draw Action Buttons safely above local hand
     if string.match(GameLogic.phase, "BETTING") and GameLogic.currentPlayer == GameLogic.myPlayerIdx and not GameLogic.players[GameLogic.myPlayerIdx].isBot then
         local btnWidth = 80

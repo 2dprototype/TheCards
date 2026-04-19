@@ -737,21 +737,46 @@ function GameLogic.draw()
         -- Draw Hand Backs for Opponents Beautifully fanned out
         local hSize = p.handSize or (p.hand and #p.hand) or 0
         if (pos ~= "BOTTOM") and hSize > 0 then
-            local rotStep = GameLogic.currentModeName == "old_maid" and 0 or 0.1
-            local totalArc = (hSize - 1) * rotStep
-            local startRot = -totalArc / 2
-            
-            for j = 1, hSize do 
-                local offset = (j - hSize/2) * 12
-                local rz = startRot + ((j-1) * rotStep)
-                if pos == "LEFT" then 
-                    GameLogic.drawCardBack(140, cy + offset, math.pi/2 + rz)
-                elseif pos == "TOP" then 
-                    GameLogic.drawCardBack(cx - offset, 140, rz)
-                elseif pos == "RIGHT" then 
-                    GameLogic.drawCardBack(_G.getW() - 140, cy - offset, -math.pi/2 + rz) 
-                elseif pos == "BOTTOM" then
-                    GameLogic.drawCardBack(cx + offset, _G.getH() - 140, rz)
+            if GameLogic.currentModeName == "poker" and GameLogic.phase == "SHOWDOWN" and p.hand and not p.folded then
+                local rotStep = math.pi / 24
+                local totalArc = (hSize - 1) * rotStep
+                local startRot = -totalArc / 2
+                for j, c in ipairs(p.hand) do
+                    local offset = (j - hSize/2) * 12
+                    local rz = startRot + ((j-1) * rotStep)
+                    local drawX, drawY = 0, 0
+                    if pos == "LEFT" then 
+                        drawX, drawY = 140, cy + offset
+                        rz = math.pi/2 + rz
+                    elseif pos == "TOP" then 
+                        drawX, drawY = cx - offset, 140
+                    elseif pos == "RIGHT" then 
+                        drawX, drawY = _G.getW() - 140, cy - offset
+                        rz = -math.pi/2 + rz
+                    end
+                    love.graphics.push()
+                    love.graphics.translate(drawX, drawY)
+                    love.graphics.rotate(rz)
+                    GameLogic.drawCard(c, -35, -50, true)
+                    love.graphics.pop()
+                end
+            else
+                local rotStep = GameLogic.currentModeName == "old_maid" and 0 or 0.1
+                local totalArc = (hSize - 1) * rotStep
+                local startRot = -totalArc / 2
+                
+                for j = 1, hSize do 
+                    local offset = (j - hSize/2) * 12
+                    local rz = startRot + ((j-1) * rotStep)
+                    if pos == "LEFT" then 
+                        GameLogic.drawCardBack(140, cy + offset, math.pi/2 + rz)
+                    elseif pos == "TOP" then 
+                        GameLogic.drawCardBack(cx - offset, 140, rz)
+                    elseif pos == "RIGHT" then 
+                        GameLogic.drawCardBack(_G.getW() - 140, cy - offset, -math.pi/2 + rz) 
+                    elseif pos == "BOTTOM" then
+                        GameLogic.drawCardBack(cx + offset, _G.getH() - 140, rz)
+                    end
                 end
             end
         end
