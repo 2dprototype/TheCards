@@ -364,6 +364,7 @@
     <div class="button-bar">
         <button class="btn btn-primary" id="generateBtn">⟳ generate front</button>
         <button class="btn btn-outline" id="saveFrontBtn">↓ save front PNG</button>
+        <button class="btn btn-outline" id="saveJokerBtn">↓ save joker PNG</button>
         <button class="btn btn-outline" id="saveBackBtn">↓ save back PNG</button>
         <button class="btn btn-outline" id="saveBackSheetBtn">↓ back sheet (4x)</button>
     </div>
@@ -746,6 +747,56 @@
             ctx.restore();
         }
 
+        function drawJokerCard(ctx, w, h) {
+            const borderColor = document.getElementById('borderColor').value;
+            const borderWidth = parseFloat(document.getElementById('borderWidth').value);
+            const cornerRadius = parseFloat(document.getElementById('cornerRadius').value);
+            const patternType = document.getElementById('patternType').value;
+            const bgColor = document.getElementById('cardBgColor').value;
+            
+            const suitTint = '#1e2e3f'; // Dark tint for Joker
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.roundRect(0, 0, w, h, cornerRadius);
+            ctx.clip();
+            
+            if (document.getElementById('showShadow').checked) {
+                ctx.shadowColor = 'rgba(0,0,0,0.06)';
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+            }
+            
+            ctx.fillStyle = bgColor; ctx.fillRect(0,0,w,h);
+            
+            if (typeof drawPattern === 'function') {
+                drawPattern(ctx, w, h, patternType, suitTint);
+            }
+            
+            ctx.shadowColor = 'transparent';
+            
+            ctx.beginPath();
+            ctx.roundRect(borderWidth/2, borderWidth/2, w - borderWidth, h - borderWidth, Math.max(0, cornerRadius - borderWidth/2));
+            ctx.strokeStyle = borderColor;
+            ctx.lineWidth = borderWidth;
+            ctx.stroke();
+
+            // Draw Joker specifics
+            ctx.font = `bold ${h * 0.15}px "Inter", "Segoe UI", sans-serif`;
+            ctx.fillStyle = suitTint;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            ctx.fillText("★", w/2, h/2 - h*0.25);
+            ctx.font = `bold ${h * 0.1}px "Inter", "Segoe UI", sans-serif`;
+            ctx.fillText("JOKER", w/2, h/2);
+            ctx.font = `bold ${h * 0.15}px "Inter", "Segoe UI", sans-serif`;
+            ctx.fillText("★", w/2, h/2 + h*0.25);
+
+            ctx.restore();
+        }
+
         function generateFrontSheet(){
             const w = parseFloat(document.getElementById('cardWidth').value)||100;
             const h = parseFloat(document.getElementById('cardHeight').value)||140;
@@ -782,6 +833,14 @@
         document.getElementById('generateBtn').addEventListener('click', generateFrontSheet);
         document.getElementById('saveFrontBtn').addEventListener('click', ()=>{
             const link = document.createElement('a'); link.download = 'modern_cards_front.png'; link.href = frontCanvas.toDataURL(); link.click();
+        });
+        document.getElementById('saveJokerBtn').addEventListener('click', ()=>{
+            const w = parseFloat(document.getElementById('cardWidth').value)||100;
+            const h = parseFloat(document.getElementById('cardHeight').value)||140;
+            const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            drawJokerCard(ctx, w, h);
+            const link = document.createElement('a'); link.download = 'joker.png'; link.href = canvas.toDataURL(); link.click();
         });
         document.getElementById('saveBackBtn').addEventListener('click', ()=>{
             updateBackPreview();

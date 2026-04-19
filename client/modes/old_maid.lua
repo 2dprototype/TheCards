@@ -425,12 +425,52 @@ function OldMaid.drawCallingUI(cx, cy, W, H)
 end
 
 function OldMaid.drawScoreboard(cx, cy, W, H)
-    GameLogic.drawText("SCOREBOARD (Old Maid)", W - 295, 27, 280, "center", {1, 0.85, 0.3, 1})
-    if not GameLogic.isScoreboardCollapsed then
-        for i=1, 4 do
+    if not GameLogic.sbFont then
+        local currentSize = love.graphics.getFont():getHeight()
+        GameLogic.sbFont = love.graphics.newFont(math.max(10, math.floor(currentSize * 0.85)))
+    end
+    local oldFont = love.graphics.getFont()
+    love.graphics.setFont(GameLogic.sbFont)
+
+    local isCollapsed = GameLogic.isScoreboardCollapsed
+
+    local sbWidth = 260
+    local sbHeight = isCollapsed and 30 or (60 + (4 * 24))
+    local sbX = W - sbWidth - 15
+    local sbY = 15
+
+    love.graphics.setColor(0.05, 0.05, 0.1, 0.75)
+    love.graphics.rectangle("fill", sbX, sbY, sbWidth, sbHeight, 8)
+    love.graphics.setColor(1, 1, 1, 0.1)
+    love.graphics.rectangle("line", sbX, sbY, sbWidth, sbHeight, 8)
+
+    local btnText = isCollapsed and "[+] SCOREBOARD (Tab)" or "[-] SCOREBOARD (Tab)"
+    love.graphics.setColor(1, 0.85, 0.3, 1)
+    love.graphics.printf(btnText, sbX, sbY + 8, sbWidth, "center")
+
+    if not isCollapsed then
+        local colName = 10
+        local colStatus = 140
+
+        local labelY = sbY + 28
+        local labelColor = {0.6, 0.6, 0.6, 1}
+        GameLogic.drawText("Player", sbX + colName, labelY, 110, "left", labelColor)
+        GameLogic.drawText("Status/Cards",  sbX + colStatus, labelY, 110, "right", labelColor)
+
+        love.graphics.setColor(1, 1, 1, 0.1)
+        love.graphics.line(sbX + 10, sbY + 45, sbX + sbWidth - 10, sbY + 45)
+
+        local scoreY = sbY + 52
+        for i = 1, 4 do
             local p = GameLogic.players[i]
-            local pColor = (i == GameLogic.myPlayerIdx) and {0.35, 0.95, 0.45, 1} or {0.9, 0.9, 0.9, 1}
-            GameLogic.drawTruncatedText(p.name, W - 295, 57 + (i*25), 180, "left", pColor)
+            local isCurrent = (i == GameLogic.currentPlayer and GameLogic.phase ~= "ROUND_OVER" and GameLogic.phase ~= "MATCH_OVER")
+            if isCurrent then
+                love.graphics.setColor(1, 1, 1, 0.05)
+                love.graphics.rectangle("fill", sbX + 5, scoreY - 2, sbWidth - 10, 20, 4)
+            end
+            
+            local pColor = isCurrent and {0.3, 0.95, 0.4, 1} or {1, 1, 1, 1}
+            GameLogic.drawTruncatedText(p.name, sbX + colName, scoreY, 120, "left", pColor)
             
             local txt = ""
             local hSize = p.handSize or (p.hand and #p.hand) or 0
@@ -447,32 +487,13 @@ function OldMaid.drawScoreboard(cx, cy, W, H)
                 elseif place == 4 then txt = "4th (Loser)" pColor = {1, 0.3, 0.3, 1}
                 else txt = "Safe" end
             end
-            GameLogic.drawText(txt, W - 115, 57 + (i*25), 100, "right", pColor)
-        end
-    else
-        local myP = GameLogic.players[GameLogic.myPlayerIdx]
-        if myP then
-            GameLogic.drawTruncatedText(myP.name, W - 295, 57 + 25, 180, "left", {0.35, 0.95, 0.45, 1})
             
-            local txt = ""
-            local hSize = myP.handSize or (myP.hand and #myP.hand) or 0
-            local pColor = {0.35, 0.95, 0.45, 1}
-            if hSize > 0 then
-                txt = "Cards: " .. hSize
-            else
-                local place = 0
-                for rank, fIdx in ipairs(OldMaid.finishOrder) do
-                    if fIdx == GameLogic.myPlayerIdx then place = rank; break end
-                end
-                if place == 1 then txt = "1st" pColor = {1, 0.8, 0.2, 1}
-                elseif place == 2 then txt = "2nd" pColor = {0.8, 0.8, 0.8, 1}
-                elseif place == 3 then txt = "3rd" pColor = {0.8, 0.5, 0.2, 1}
-                elseif place == 4 then txt = "4th (Loser)" pColor = {1, 0.3, 0.3, 1}
-                else txt = "Safe" end
-            end
-            GameLogic.drawText(txt, W - 115, 57 + 25, 100, "right", pColor)
+            GameLogic.drawText(txt, sbX + colStatus, scoreY, 110, "right", pColor)
+            scoreY = scoreY + 24
         end
     end
+
+    love.graphics.setFont(oldFont)
 end
 
 function OldMaid.canPlayCard(card, playerHand)

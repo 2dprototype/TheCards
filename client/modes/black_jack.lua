@@ -188,9 +188,19 @@ function BlackJack.update(dt)
             if p.hand and #p.hand > 0 then
                 local px, py = GameLogic.getPlayerAnchor(i)
                 local dirX, dirY = cx - px, cy - py
-                local dist = math.sqrt(dirX^2 + dirY^2)
-                local targetXBase = px + (dirX/dist)*130
-                local targetYBase = py + (dirY/dist)*130
+                local rel = (i - GameLogic.myPlayerIdx) % 4
+                local targetXBase = px
+                local targetYBase = py
+                if rel == 1 then -- LEFT
+                    targetXBase = px + math.min(#p.hand * 15 + 100, 200)
+                    targetYBase = py - 40
+                elseif rel == 2 then -- TOP
+                    targetXBase = cx
+                    targetYBase = py + 120
+                elseif rel == 3 then -- RIGHT
+                    targetXBase = px - math.min(#p.hand * 15 + 100, 200)
+                    targetYBase = py - 40
+                end
                 
                 local startX = targetXBase - (#p.hand * 30)/2
                 for j, c in ipairs(p.hand) do
@@ -365,10 +375,17 @@ function BlackJack.drawCallingUI(cx, cy, W, H)
                 px, py = cx, H - 150
             else
                 local bx, by = GameLogic.getPlayerAnchor(i)
-                local dirX, dirY = cx - bx, cy - by
-                local dist = math.sqrt(dirX^2 + dirY^2)
-                px = bx + (dirX/dist)*130
-                py = by + (dirY/dist)*130 + 70 -- offset nicely below their cards
+                local rel = (i - GameLogic.myPlayerIdx) % 4
+                if rel == 1 then -- LEFT
+                    px = bx + math.min(#p.hand * 15 + 100, 200)
+                    py = by + 60
+                elseif rel == 2 then -- TOP
+                    px = cx
+                    py = by + 190
+                elseif rel == 3 then -- RIGHT
+                    px = bx - math.min(#p.hand * 15 + 100, 200)
+                    py = by + 60
+                end
             end
             
             local color = {0.8, 0.8, 1, 1}
