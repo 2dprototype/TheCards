@@ -34,7 +34,6 @@ function OldMaid.sortHand(hand)
 end
 
 function OldMaid.startRound()
-    GameLogic.phase = "DISCARD_INITIAL"
     GameLogic.trick = {}
     GameLogic.flyingCards = {}
     OldMaid.finishOrder = {}
@@ -64,9 +63,10 @@ function OldMaid.startRound()
         end
     end
     
+    GameLogic.phase = "PICKING"
     GameLogic.currentPlayer = (GameLogic.roundNum % 4) + 1
     if GameLogic.currentPlayer > 4 then GameLogic.currentPlayer = 1 end
-    GameLogic.turnTimer = 1.0
+    GameLogic.turnTimer = GameLogic.maxTurnTime or 15
     
     GameLogic.syncState()
 end
@@ -77,48 +77,45 @@ local function getColor(suit)
     return "JOKER"
 end
 
-function OldMaid.discardPairs(playerIdx)
+function OldMaid.checkAndDiscard(playerIdx, pickedCard)
     local hand = GameLogic.players[playerIdx].hand
-    if not hand then return false end
+    if not hand or not pickedCard then return false end
     
-    local signatureCounts = {}
+    local matchIdx = -1
+    local pickedIdx = -1
+    
+    local pickedSig = pickedCard.rank .. "_" .. getColor(pickedCard.suit)
+    
     for i, c in ipairs(hand) do
-        if c.suit ~= "JOKER" then
-            local sig = c.rank .. "_" .. getColor(c.suit)
-            signatureCounts[sig] = signatureCounts[sig] or {}
-            table.insert(signatureCounts[sig], i)
+        if c == pickedCard then
+            pickedIdx = i
+        elseif c.suit ~= "JOKER" and c.rank .. "_" .. getColor(c.suit) == pickedSig then
+            matchIdx = i
         end
     end
     
-    local indicesToRemove = {}
-    for sig, indices in pairs(signatureCounts) do
-        local pairsCount = math.floor(#indices / 2)
-        for p = 1, pairsCount do
-            table.insert(indicesToRemove, indices[p*2 - 1])
-            table.insert(indicesToRemove, indices[p*2])
+    if matchIdx ~= -1 and pickedIdx ~= -1 then
+        local maxI = math.max(pickedIdx, matchIdx)
+        local minI = math.min(pickedIdx, matchIdx)
+        local c1 = table.remove(hand, maxI)
+        local c2 = table.remove(hand, minI)
+        
+        local cx, cy = _G.getW() / 2, _G.getH() / 2
+        local px, py = GameLogic.getPlayerAnchor(playerIdx)
+        
+        for _, c in ipairs({c1, c2}) do
+            if playerIdx ~= GameLogic.myPlayerIdx then
+                c.visX, c.visY = px, py
+            end
+            c.destX = cx + math.random(-80, 80)
+            c.destY = cy + math.random(-60, 60)
+            c.destRot = math.random() * math.pi * 2
+            table.insert(GameLogic.flyingCards, { card = c, targetId = "CENTER" })
+            table.insert(OldMaid.discardPile, c)
         end
+        return true
     end
-    
-    if #indicesToRemove == 0 then return false end
-    
-    table.sort(indicesToRemove, function(a,b) return a > b end)
-    
-    local px, py = GameLogic.getPlayerAnchor(playerIdx)
-    local cx, cy = _G.getW() / 2, _G.getH() / 2
-    for _, idx in ipairs(indicesToRemove) do
-        local c = table.remove(hand, idx)
-        if playerIdx ~= GameLogic.myPlayerIdx then
-            c.visX, c.visY = px, py
-        end
-        c.destX = cx + math.random(-80, 80)
-        c.destY = cy + math.random(-60, 60)
-        c.destRot = math.random() * math.pi * 2
-        table.insert(GameLogic.flyingCards, { card = c, targetId = "CENTER" })
-        table.insert(OldMaid.discardPile, c)
-    end
-    
-    OldMaid.sortHand(hand)
-    return true
+    return false
 end
 
 function OldMaid.checkPlacements()
@@ -209,61 +206,26 @@ end
 function OldMaid.update(dt)
     if GameLogic.mode == "GUEST" then return end
     
-    if GameLogic.phase == "DISCARD_INITIAL" then
-        if GameLogic.turnTimer then
-            GameLogic.turnTimer = GameLogic.turnTimer - dt
-            if GameLogic.turnTimer <= 0 then
-                local discardedFound = false
-                for i=1, 4 do
-                    if OldMaid.discardPairs(i) then discardedFound = true end
-                end
-                OldMaid.checkPlacements()
-                
-                local startP = GameLogic.currentPlayer
-                while true do
-                    local isFinished = false
-                    for _, fIdx in ipairs(OldMaid.finishOrder) do
-                        if fIdx == GameLogic.currentPlayer then isFinished = true; break end
-                    end
-                    if not isFinished then break end
-                    
-                    GameLogic.currentPlayer = GameLogic.currentPlayer + 1
-                    if GameLogic.currentPlayer > 4 then GameLogic.currentPlayer = 1 end
-                    if GameLogic.currentPlayer == startP then break end
-                end
-                
-                if discardedFound then
-                    GameLogic.phase = "DISCARDING_ANIMATION"
-                else
-                    GameLogic.phase = "PICKING"
-                    GameLogic.turnTimer = GameLogic.maxTurnTime or 15
-                end
-                GameLogic.syncState()
-                OldMaid.checkForMatchOver()
-            end
-        end
-    elseif GameLogic.phase == "DISCARDING_ANIMATION" then
-        if #GameLogic.flyingCards == 0 then
-            GameLogic.phase = "PICKING"
-            GameLogic.turnTimer = GameLogic.maxTurnTime or 15
-            GameLogic.syncState()
-        end
-    elseif GameLogic.phase == "PICKING_ANIMATION" then
+    if GameLogic.phase == "PICKING_ANIMATION" then
         if #GameLogic.flyingCards == 0 then
             if pendingPickedCard then
                 table.insert(GameLogic.players[GameLogic.currentPlayer].hand, pendingPickedCard)
                 OldMaid.sortHand(GameLogic.players[GameLogic.currentPlayer].hand)
-                pendingPickedCard = nil
             end
             GameLogic.phase = "CHECK_PAIR"
-            GameLogic.turnTimer = 0.5
+            GameLogic.turnTimer = 0.8
             GameLogic.syncState()
         end
     elseif GameLogic.phase == "CHECK_PAIR" then
         if GameLogic.turnTimer then
             GameLogic.turnTimer = GameLogic.turnTimer - dt
             if GameLogic.turnTimer <= 0 then
-                local didDiscard = OldMaid.discardPairs(GameLogic.currentPlayer)
+                local didDiscard = false
+                if pendingPickedCard then
+                    didDiscard = OldMaid.checkAndDiscard(GameLogic.currentPlayer, pendingPickedCard)
+                    pendingPickedCard = nil
+                end
+                
                 OldMaid.checkPlacements()
                 if didDiscard then
                     GameLogic.phase = "ADVANCE_TURN_ANIM"
@@ -280,7 +242,6 @@ function OldMaid.update(dt)
         end
     end
     
-    -- Animate scattered pile properly so they stay dynamically
     for _, c in ipairs(OldMaid.discardPile) do
         if c.destX and c.destY then
             c.visX = c.visX + (c.destX - c.visX) * dt * 5
@@ -321,7 +282,7 @@ function OldMaid.pickCard(targetIdx, cardIdx)
     table.insert(GameLogic.flyingCards, { card = c, targetId = GameLogic.currentPlayer, sourceId = targetIdx })
     
     GameLogic.phase = "PICKING_ANIMATION"
-    GameLogic.turnTimer = 2.0 -- Safety net
+    GameLogic.turnTimer = 2.0
     GameLogic.syncState()
 end
 
@@ -452,7 +413,6 @@ function OldMaid.mousepressed(x, y, button)
 end
 
 function OldMaid.drawCallingUI(cx, cy, W, H)
-    -- Draw scattered match pile under any potential UI popups
     for _, c in ipairs(OldMaid.discardPile) do
         love.graphics.push()
         love.graphics.translate(c.visX or cx, c.visY or cy)

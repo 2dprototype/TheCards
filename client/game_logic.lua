@@ -323,7 +323,10 @@ function GameLogic.update(dt)
     -- Flying Trick Cards collection
     for i = #GameLogic.flyingCards, 1, -1 do
         local f = GameLogic.flyingCards[i]
-        local tx, ty = GameLogic.getPlayerAnchor(f.targetId)
+        local tx, ty = f.card.destX or 0, f.card.destY or 0
+        if not f.card.destX then
+            tx, ty = GameLogic.getPlayerAnchor(f.targetId)
+        end
         f.card.visX = f.card.visX + (tx - f.card.visX) * dt * lerpSpeed
         f.card.visY = f.card.visY + (ty - f.card.visY) * dt * lerpSpeed
         if math.abs(tx - f.card.visX) < 10 and math.abs(ty - f.card.visY) < 10 then
@@ -797,7 +800,7 @@ function GameLogic.draw()
     GameLogic.drawText("Round: " .. GameLogic.roundNum .. "/" .. (GameLogic.totalRounds or 5), 25, 25, 180, "left", {0.9, 0.9, 0.9, 1})
     GameLogic.drawText("Phase: " .. GameLogic.phase, 25, 45, 180, "left", {0.8, 0.8, 0.8, 1})
 
-    if (GameLogic.phase == "CALLING" or GameLogic.phase == "PLAYING") and GameLogic.turnTimer then
+    if GameLogic.turnTimer and GameLogic.turnTimer > 0 and GameLogic.phase ~= "ROUND_OVER" and GameLogic.phase ~= "MATCH_OVER" then
         local tColor = GameLogic.turnTimer <= 5 and {1, 0.4, 0.4, 1} or {0.4, 0.9, 1, 1}
         GameLogic.drawText("Time: " .. math.ceil(GameLogic.turnTimer) .. "s", 25, 65, 180, "left", tColor)
     end
