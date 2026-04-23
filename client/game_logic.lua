@@ -611,6 +611,11 @@ function GameLogic.keypressed(key)
     if key == "tab" then
         GameLogic.isScoreboardCollapsed = not GameLogic.isScoreboardCollapsed
     end
+    
+    -- Pass key events to active mode for debugging
+    if GameLogic.activeMode and GameLogic.activeMode.keypressed then
+        GameLogic.activeMode.keypressed(key)
+    end
 end
 
 function GameLogic.draw()
