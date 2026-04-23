@@ -97,7 +97,7 @@ function Poker.startRound()
         GameLogic.players[i].currentBet = 0
         GameLogic.players[i].folded = false
         if not GameLogic.players[i].chips then
-            GameLogic.players[i].chips = 5000
+            GameLogic.players[i].chips = 10000
         end
         -- Initialize animation variables
         GameLogic.players[i].visChips = GameLogic.players[i].chips
@@ -901,9 +901,9 @@ function Poker.drawCallingUI(cx, cy, W, H)
             local bankX, bankY
             local rel = (i - GameLogic.myPlayerIdx) % 4
             
-            if rel == 0 then bankX = cx + 130; bankY = H - 110
-            elseif rel == 1 then bankX = 140; bankY = cy - 100
-            elseif rel == 2 then bankX = cx - 290; bankY = 140
+            if rel == 0 then bankX = cx - 200; bankY = H - 110
+            elseif rel == 1 then bankX = cx + 90; bankY = 100
+            elseif rel == 2 then bankX = 100; bankY = cy - 140
             elseif rel == 3 then bankX = W - 180; bankY = cy + 100 end
             
             drawChipStack(p.visChips, bankX, bankY)
@@ -918,10 +918,10 @@ function Poker.drawCallingUI(cx, cy, W, H)
         if i == GameLogic.myPlayerIdx then betY = betY - 80 end
         
         if (p.visBet or 0) >= 1 then
-            drawChipStack(p.visBet, betX, betY)
+            -- drawChipStack(p.visBet, betX, betY)
             love.graphics.setColor(UI_THEMES.bet_label_bg)
             love.graphics.rectangle("fill", betX - 25, betY + 12, 50, 18, 4)
-            GameLogic.drawText("$"..math.floor(p.visBet), betX - 25, betY + 14, 50, "center", UI_THEMES.bet_label_text)
+            GameLogic.drawText("$"..math.floor(p.visBet+1), betX - 25, betY + 14, 50, "center", UI_THEMES.bet_label_text)
         end
         
         -- Dealer Button
@@ -1044,7 +1044,7 @@ function Poker.drawCallingUI(cx, cy, W, H)
             if p.folded then
                 GameLogic.drawText("FOLDED", panelX + 180, currentY, 190, "right", UI_THEMES.disabled)
             elseif res then
-                GameLogic.drawText(res.name, panelX + 180, currentY, 190, "right", handCol)
+                GameLogic.drawText(res.name or "???", panelX + 180, currentY, 190, "right", handCol)
             end
             
             currentY = currentY + 35

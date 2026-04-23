@@ -132,7 +132,7 @@ func main() {
 	}()
 
 	fmt.Println(strings.Repeat("=", 60))
-	fmt.Println("DevilBridge Local Proxy Server")
+	fmt.Println("TheCards Local Proxy Server")
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Printf("Local WebSocket endpoint: ws://0.0.0.0:%s\n", localPort)
 	fmt.Printf("Local HTTP endpoint: http://0.0.0.0:%s\n", localPort)
@@ -190,7 +190,7 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
 		html := fmt.Sprintf(`<!DOCTYPE html>
         <html>
         <head>
-            <title>DevilBridge Local Proxy</title>
+            <title>TheCards Local Proxy</title>
             <style>
                 body { font-family: monospace; padding: 2rem; background: #1e1e1e; color: #d4d4d4; }
                 h1 { color: #4ec9b0; }
@@ -202,7 +202,7 @@ func handleHTTP(w http.ResponseWriter, r *http.Request) {
             </style>
         </head>
         <body>
-            <h1>DevilBridge Local Proxy</h1>
+            <h1>TheCards Local Proxy</h1>
             <div class="status">
                 <strong>Status:</strong> <span class="connected">RUNNING</span><br>
                 <strong>Remote Server:</strong> %s<br>

@@ -2,27 +2,27 @@
 setlocal EnableDelayedExpansion
 
 echo ==============================================
-echo Building DevilBridge Dev Release...
+echo Building TheCards Dev Release...
 echo ==============================================
 echo.
 
 if not exist build mkdir build
 
 echo [1/4] Creating .love file from client folder...
-if exist build\DevilBridge.love del build\DevilBridge.love
+if exist build\TheCards.love del build\TheCards.love
 
 :: Navigate into the client folder and zip its contents (not the folder itself)
 pushd client
 :: Use PowerShell to create zip with proper structure (main.lua at root)
-powershell.exe -noprofile -command "Compress-Archive -Path * -DestinationPath '..\build\DevilBridge.zip' -Force"
+powershell.exe -noprofile -command "Compress-Archive -Path * -DestinationPath '..\build\TheCards.zip' -Force"
 popd
 
-if exist build\DevilBridge.zip (
+if exist build\TheCards.zip (
     :: Rename .zip to .love
-    ren build\DevilBridge.zip DevilBridge.love
-    echo Successfully created DevilBridge.love
+    ren build\TheCards.zip TheCards.love
+    echo Successfully created TheCards.love
 ) else (
-    echo [ERROR] Failed to create DevilBridge.love!
+    echo [ERROR] Failed to create TheCards.love!
     pause
     exit /b 1
 )
@@ -44,11 +44,11 @@ echo.
 
 echo [3/4] Building fused executable...
 :: Create fused executable by appending .love to love.exe
-copy /b "!LOVE_EXE!" + "build\DevilBridge.love" "build\bridge.exe" /Y >nul
-if exist build\bridge.exe (
-    echo Successfully created bridge.exe
+copy /b "!LOVE_EXE!" + "build\TheCards.love" "build\cards.exe" /Y >nul
+if exist build\cards.exe (
+    echo Successfully created cards.exe
 ) else (
-    echo [ERROR] Failed to create bridge.exe!
+    echo [ERROR] Failed to create cards.exe!
     pause
     exit /b 1
 )
@@ -96,7 +96,7 @@ echo ==============================================
 echo Build complete! Distribution files in \build folder:
 echo ==============================================
 echo Required files for distribution:
-echo   - bridge.exe
+echo   - cards.exe
 echo   - love.dll
 echo   - lua51.dll
 echo   - SDL2.dll

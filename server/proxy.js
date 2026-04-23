@@ -186,7 +186,7 @@ const server = http.createServer((req, res) => {
         res.write(`<!DOCTYPE html>
         <html>
         <head>
-            <title>DevilBridge Local Proxy</title>
+            <title>TheCards Local Proxy</title>
             <style>
                 body { font-family: monospace; padding: 2rem; background: #1e1e1e; color: #d4d4d4; }
                 h1 { color: #4ec9b0; }
@@ -198,7 +198,7 @@ const server = http.createServer((req, res) => {
             </style>
         </head>
         <body>
-            <h1>DevilBridge Local Proxy</h1>
+            <h1>TheCards Local Proxy</h1>
             <div class="status">
                 <strong>Status:</strong> <span class="connected">RUNNING</span><br>
                 <strong>Remote Server:</strong> ${REMOTE_URL}<br>
@@ -367,7 +367,7 @@ wss.on('connection', (localSocket, req) => {
 // Start the proxy server
 server.listen(LOCAL_PORT, '0.0.0.0', () => {
     console.log('\n' + colorize('═'.repeat(60), colors.fg.cyan));
-    console.log(colorize('  DevilBridge Local Proxy Server', colors.bright + colors.fg.green));
+    console.log(colorize('  TheCards Local Proxy Server', colors.bright + colors.fg.green));
     console.log(colorize('═'.repeat(60), colors.fg.cyan));
     console.log(`  ${colorize('Local WS:', colors.fg.yellow)}  ws://0.0.0.0:${LOCAL_PORT}`);
     console.log(`  ${colorize('Local HTTP:', colors.fg.yellow)} http://0.0.0.0:${LOCAL_PORT}`);

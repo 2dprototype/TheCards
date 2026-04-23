@@ -87,7 +87,7 @@ func showConfigWindow(exeDir string) (string, string, bool) {
 	window := wui.NewWindow()
 	window.SetFont(windowFont)
 	window.SetInnerBounds(270, 100, 504, 308)
-	window.SetTitle("Bridge Launcher")
+	window.SetTitle("TheCards (Launcher)")
 	window.SetHasMaxButton(false)
 	window.SetHasMinButton(false)
 
@@ -124,7 +124,7 @@ func showConfigWindow(exeDir string) (string, string, bool) {
 	labelTitle := wui.NewLabel()
 	labelTitle.SetFont(labelTitleFont)
 	labelTitle.SetBounds(30, 21, 168, 29)
-	labelTitle.SetText("Bridge Launcher")
+	labelTitle.SetText("TheCards - Launcher")
 	window.Add(labelTitle)
 
 	labelInfo := wui.NewLabel()
@@ -182,7 +182,7 @@ func showConfigWindow(exeDir string) (string, string, bool) {
 
 func runLauncher(exeDir, remoteURL, port string) {
 	fmt.Println(strings.Repeat("=", 60))
-	fmt.Println("DevilBridge Game Launcher")
+	fmt.Println("TheCards (Launcher)")
 	fmt.Println(strings.Repeat("=", 60))
 	fmt.Printf("Remote URL: %s\n", remoteURL)
 	fmt.Printf("Local Port: %s\n", port)
@@ -234,17 +234,17 @@ func runLauncher(exeDir, remoteURL, port string) {
 	}()
 
 	fmt.Println(">> Launching Game Client...")
-	gamePath := filepath.Join(exeDir, "bridge.exe")
+	gamePath := filepath.Join(exeDir, "cards.exe")
 	
-	// Check for bridge.exe
+	// Check for cards.exe
 	if _, err := os.Stat(gamePath); err != nil {
 		// Try without .exe extension for non-Windows systems
-		gamePathNoExt := filepath.Join(exeDir, "bridge")
+		gamePathNoExt := filepath.Join(exeDir, "cards")
 		if _, err := os.Stat(gamePathNoExt); err == nil {
 			gamePath = gamePathNoExt
 		} else {
-			fmt.Println("Error: bridge.exe not found in", exeDir)
-			fmt.Println("Please ensure bridge.exe is present in the application directory.")
+			fmt.Println("Error: cards.exe not found in", exeDir)
+			fmt.Println("Please ensure cards.exe is present in the application directory.")
 			cancel()
 			os.Exit(1)
 		}

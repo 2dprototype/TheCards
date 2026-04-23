@@ -29,10 +29,10 @@ const server = http.createServer((req, res) => {
     
     if (req.method === 'GET' && req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'text/html' });
-        res.write('<html><head><title>DevilBridge Rooms</title>');
+        res.write('<html><head><title>TheCards Rooms</title>');
         res.write('<style>body{font-family:sans-serif;padding:2rem} .room{background:#eee;padding:10px;margin-bottom:10px;border-radius:5px;box-shadow:0 2px 4px rgba(0,0,0,0.1);}</style></head><body>');
-        res.write('<h1>DevilBridge Game Server</h1>');
-        res.write('<p>WebSocket server is running. Connect using wss://devilbridge.onrender.com</p>');
+        res.write('<h1>TheCards Game Server</h1>');
+        res.write('<p>WebSocket server is running. Connect using wss://TheCards.onrender.com</p>');
         res.write('<h2>Available Game Rooms</h2>');
         let activeRooms = Array.from(rooms.values());
         if (activeRooms.length === 0) {
@@ -213,7 +213,7 @@ function handleMessage(socket, clientId, msg) {
 }
 
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`DevilBridge Relay Server listening on port ${PORT}`);
+    console.log(`TheCards Relay Server listening on port ${PORT}`);
     console.log(`WebSocket endpoint: ws://0.0.0.0:${PORT}`);
     console.log(`HTTP endpoint: http://0.0.0.0:${PORT}`);
 });
