@@ -165,8 +165,8 @@ function setupLobbyUI()
     if not _G.matchRounds then _G.matchRounds = 5 end
     if not _G.matchTurnTime then _G.matchTurnTime = 15 end
     if not _G.currentGameModeIdx then _G.currentGameModeIdx = 1 end
-    _G.gameModeNames = {"Call Bridge", "Poker", "Black Jack", "Old Maid"}
-    _G.gameModeFiles = {"call_bridge", "poker", "black_jack", "old_maid"}
+    _G.gameModeNames = {"Call Bridge", "Poker", "Black Jack", "Old Maid", "Horse Betting"}
+    _G.gameModeFiles = {"call_bridge", "poker", "black_jack", "old_maid", "horse_betting"}
     
     -- Mode Option
     local modeName = _G.gameModeNames[_G.currentGameModeIdx]

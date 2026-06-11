@@ -656,7 +656,7 @@ function GameLogic.draw()
         local sorted = {}
         for i = 1, 4 do table.insert(sorted, GameLogic.players[i]) end
         table.sort(sorted, function(a, b) 
-            local useChips = (GameLogic.currentModeName == "poker" or GameLogic.currentModeName == "black_jack")
+            local useChips = (GameLogic.currentModeName == "poker" or GameLogic.currentModeName == "black_jack" or GameLogic.currentModeName == "horse_betting")
             local scoreA = useChips and (a.chips or 0) or a.score
             local scoreB = useChips and (b.chips or 0) or b.score
             return scoreA > scoreB 
@@ -670,7 +670,7 @@ function GameLogic.draw()
             local nameColor = isLocalPlayer and pColor or {0.9, 0.9, 0.9, 0.85}
             GameLogic.drawText(i .. ". " .. p.name, cx - 200, cy - 65 + (i * 45), 200, "left", nameColor, 1.1)
             
-            local scoreVal = (GameLogic.currentModeName == "poker" or GameLogic.currentModeName == "black_jack") and ("$" .. tostring(math.floor(p.chips or 0))) or string.format("%.1f", p.score)
+            local scoreVal = (GameLogic.currentModeName == "poker" or GameLogic.currentModeName == "black_jack" or GameLogic.currentModeName == "horse_betting") and ("$" .. tostring(math.floor(p.chips or 0))) or string.format("%.1f", p.score)
             GameLogic.drawText(scoreVal, cx + 120, cy - 65 + (i * 45), 80, "right", pColor, 1.2)
             
             -- Highlight background for local player
@@ -680,6 +680,11 @@ function GameLogic.draw()
             end
         end
         
+        return
+    end
+
+    if GameLogic.activeMode and GameLogic.activeMode.overrideDraw then
+        GameLogic.activeMode.draw(cx, cy, W, H)
         return
     end
 
@@ -989,14 +994,14 @@ end
 function GameLogic.mousepressed(x, y, button)
     if button ~= 1 then return end
     
-    if GameLogic.currentPlayer ~= GameLogic.myPlayerIdx then return end
-    if GameLogic.players[GameLogic.myPlayerIdx].isBot then return end -- Bot handles itself
-    
     local cx, cy = _G.getW() / 2, _G.getH() / 2
     
     if GameLogic.activeMode and GameLogic.activeMode.mousepressed then
         GameLogic.activeMode.mousepressed(x, y, button)
     end
+
+    if GameLogic.currentPlayer ~= GameLogic.myPlayerIdx then return end
+    if GameLogic.players[GameLogic.myPlayerIdx].isBot then return end
     
     if GameLogic.phase == "PLAYING" then
         local myP = GameLogic.players[GameLogic.myPlayerIdx]
