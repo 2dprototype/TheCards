@@ -171,15 +171,15 @@ function HorseBetting.startRound()
         end
 
         HorseBetting.horses = {}
-        -- Each horse gets unique stats: base speed, variance, burst chance, fatigue
         for lane = 1, 5 do
-            -- Random odds between 2.0 and 15.0
             local odds = math.floor((2.0 + math.random() * 13.0) * 10) / 10
-            local baseSpeed = 80 + math.random(60)  -- 80-140
-            local variance = 15 + math.random(35)   -- 15-50
-            local burstChance = 0.1 + math.random() * 0.3
-            local burstSpeedBonus = 30 + math.random(40)
-            local fatigueFactor = 0.005 + math.random() * 0.015  -- slows over time
+            
+            -- HIGHLY MUTED BASE PACING (Extends total race timeline to ~20 seconds)
+            local baseSpeed = 34 + math.random(10)  
+            local variance = 8 + math.random(10)   
+            local burstChance = 0.15 + math.random() * 0.25
+            local burstSpeedBonus = 12 + math.random(12)
+            local fatigueFactor = 0.002 + math.random() * 0.005  
             
             table.insert(HorseBetting.horses, {
                 name = names[lane] or ("Horse "..lane),
@@ -192,11 +192,12 @@ function HorseBetting.startRound()
                 fatigueFactor = fatigueFactor,
                 x = 80,
                 visX = 80,
-                mood = 1.0,        -- random multiplier per race
-                trail = {}
+                mood = 0.85 + math.random() * 0.3,
+                trail = {},
+                currentSpeed = baseSpeed,
+                raceState = "NORMAL",
+                stateTimer = 0
             })
-            -- random mood
-            HorseBetting.horses[lane].mood = 0.7 + math.random() * 0.8
         end
         
         -- Reset bot bets
@@ -210,6 +211,27 @@ function HorseBetting.startRound()
     end
 end
 
+local function startRace()
+    if GameLogic.mode ~= "GUEST" then
+        HorseBetting.raceSeed = math.random(100000, 999999)
+        HorseBetting.racePRNG = PRNG.new(HorseBetting.raceSeed)
+        HorseBetting.phase = "RACING"
+        HorseBetting.elapsedTime = 0
+        HorseBetting.podium = {}
+        HorseBetting.winningHorseIdx = nil
+        raceEndTimer = 0
+        for _, h in ipairs(HorseBetting.horses) do
+            h.x = 80
+            h.visX = 80
+            h.trail = {}
+            -- Reset chaotic states for the new race
+            h.currentSpeed = h.baseSpeed
+            h.raceState = "NORMAL"
+            h.stateTimer = 0
+        end
+        GameLogic.syncState()
+    end
+end
 function HorseBetting.generateBotBets(bot)
     if not bot.chips then bot.chips = 1000 end
     local maxBet = math.floor(bot.chips * (0.15 + math.random() * 0.4))
@@ -251,6 +273,10 @@ local function startRace()
             h.x = 80
             h.visX = 80
             h.trail = {}
+            -- Reset chaotic states for the new race
+            h.currentSpeed = h.baseSpeed
+            h.raceState = "NORMAL"
+            h.stateTimer = 0
         end
         GameLogic.syncState()
     end
@@ -293,7 +319,6 @@ end
 -- Update (physics and timers)
 -- ----------------------------------------------------------------------------
 function HorseBetting.update(dt)
-    -- Betting phase timer countdown
     if HorseBetting.phase == "BETTING" then
         if GameLogic.mode ~= "GUEST" then
             bettingTimer = bettingTimer - dt
@@ -305,27 +330,70 @@ function HorseBetting.update(dt)
         return
     end
 
-    -- Racing phase
     if HorseBetting.phase == "RACING" then
         local fixed_dt = 0.03333
-        local step = math.min(dt, 0.03333)
         local steps = math.floor(dt / fixed_dt) + 1
+        
         for _ = 1, steps do
             if #HorseBetting.podium < 5 then
                 HorseBetting.elapsedTime = HorseBetting.elapsedTime + fixed_dt
                 local prng = HorseBetting.racePRNG or PRNG.new(HorseBetting.raceSeed)
-                for i = 1,5 do
+                
+                -- Track boundaries to coordinate active balancing
+                local maxDist, minDist = -1, 99999
+                for j = 1, 5 do
+                    local h2 = HorseBetting.horses[j]
+                    if h2.x > maxDist then maxDist = h2.x end
+                    if h2.x < minDist then minDist = h2.x end
+                end
+
+                for i = 1, 5 do
                     local h = HorseBetting.horses[i]
                     if h.x < 880 then
-                        local fatigue = 1.0 - (h.x / 880) * h.fatigueFactor * 30
-                        local moodEffect = h.mood
-                        local fluc = prng:randomRange(-h.variance, h.variance)
-                        local burst = 0
-                        if prng:random() < h.burstChance * fixed_dt * 5 then
-                            burst = h.burstSpeedBonus * (0.8 + prng:random() * 0.7)
+                        -- LONGER STATE INTERVALS (States persist for 1.2s - 2.5s to cultivate an epic narrative)
+                        if h.stateTimer <= 0 then
+                            h.stateTimer = prng:randomRange(1.2, 2.5)
+                            local roll = prng:nextFloat()
+                            
+                            local isTrailing = (h.x == minDist and (maxDist - minDist) > 50)
+                            local isLeading = (h.x == maxDist and (maxDist - minDist) > 40)
+
+                            if isTrailing and roll < 0.52 then
+                                h.raceState = "SURGE"    -- High chance for tailing horses to mount a massive rally
+                            elseif isLeading and roll < 0.30 then
+                                h.raceState = "STUMBLE"  -- Frontrunners risk exhaustion or losing footing
+                            elseif roll < 0.22 then
+                                h.raceState = "TIRED"
+                            elseif roll < 0.48 then
+                                h.raceState = "BURST"
+                            else
+                                h.raceState = "NORMAL"
+                            end
                         end
-                        local speed = (h.baseSpeed + fluc + burst) * fatigue * moodEffect
-                        h.x = h.x + speed * fixed_dt
+                        h.stateTimer = h.stateTimer - fixed_dt
+
+                        -- Resolve current speed modifications against new balanced timeline
+                        local targetSpeed = h.baseSpeed * h.mood
+                        
+                        if h.raceState == "SURGE" then
+                            targetSpeed = targetSpeed * 1.85 + h.burstSpeedBonus
+                        elseif h.raceState == "STUMBLE" then
+                            targetSpeed = targetSpeed * 0.22
+                        elseif h.raceState == "BURST" then
+                            targetSpeed = targetSpeed + h.burstSpeedBonus * 1.25
+                        elseif h.raceState == "TIRED" then
+                            targetSpeed = targetSpeed * 0.55
+                        end
+
+                        -- Slower inertia coefficient ensures transitions don't look choppy
+                        h.currentSpeed = h.currentSpeed + (targetSpeed - h.currentSpeed) * fixed_dt * 2.2
+                        
+                        local fatigue = 1.0 - (h.x / 880) * h.fatigueFactor * 8
+                        local fluc = prng:randomRange(-h.variance, h.variance) * 0.4
+                        local finalSpeed = math.max(6, h.currentSpeed + fluc) * fatigue
+
+                        h.x = h.x + finalSpeed * fixed_dt
+                        
                         if h.x >= 880 then
                             h.x = 880
                             table.insert(HorseBetting.podium, i)
@@ -342,7 +410,6 @@ function HorseBetting.update(dt)
                     if GameLogic.mode ~= "GUEST" then
                         HorseBetting.phase = "RESULT"
                         HorseBetting.calculatePayouts()
-                        -- FIXED: GameLogic.phase = "ROUND_OVER" was removed from here to prevent early game termination bug.
                         GameLogic.syncState()
                     end
                     break
@@ -350,28 +417,31 @@ function HorseBetting.update(dt)
             end
         end
 
-        -- Visual updates
+        -- Adjusted visual framing interpolation rates to align with the slower speeds
         for i=1,5 do
             local h = HorseBetting.horses[i]
-            h.visX = h.visX + (h.x - h.visX) * dt * 12
-            if h.x < 880 then
-                local center_y = 65 + (i-1)*32 + 16
-                if math.random() < 0.3 then
-                    table.insert(HorseBetting.dustParticles, {
-                        x = h.visX - 10,
-                        y = center_y + 5 + math.random(-3,3),
-                        vx = -50 - math.random(40),
-                        vy = -1 - math.random(4),
-                        life = 0.3,
-                        maxLife = 0.3,
-                        size = 1 + math.random(2)
-                    })
+            if h then
+                h.visX = h.visX + (h.x - h.visX) * dt * 8
+                if h.x < 880 then
+                    local center_y = 65 + (i-1)*32 + 16
+                    local dustChance = (h.raceState == "SURGE" or h.raceState == "BURST") and 0.5 or 0.15
+                    if math.random() < dustChance then
+                        table.insert(HorseBetting.dustParticles, {
+                            x = h.visX - 10,
+                            y = center_y + 5 + math.random(-2,2),
+                            vx = -30 - math.random(20),
+                            vy = -1 - math.random(2),
+                            life = 0.4,
+                            maxLife = 0.4,
+                            size = 1 + math.random(1.5)
+                        })
+                    end
+                    table.insert(h.trail, {x = h.visX, life = h.raceState == "SURGE" and 0.35 or 0.20})
                 end
-                table.insert(h.trail, {x = h.visX, life = 0.2})
-            end
-            for j=#h.trail,1,-1 do
-                h.trail[j].life = h.trail[j].life - dt
-                if h.trail[j].life <= 0 then table.remove(h.trail, j) end
+                for j=#h.trail,1,-1 do
+                    h.trail[j].life = h.trail[j].life - dt
+                    if h.trail[j].life <= 0 then table.remove(h.trail, j) end
+                end
             end
         end
 
@@ -388,7 +458,6 @@ function HorseBetting.update(dt)
         end
     end
 
-    -- Result phase particles
     if HorseBetting.phase == "RESULT" then
         if #celebrationParticles < 100 and math.random() < 0.5 then
             table.insert(celebrationParticles, {
@@ -403,13 +472,11 @@ function HorseBetting.update(dt)
         for i=#celebrationParticles,1,-1 do
             local p = celebrationParticles[i]
             p.x = p.x + p.vx * dt
-            p.y = p.y + p.vy * dt
             p.life = p.life - dt
             if p.life <= 0 then table.remove(celebrationParticles, i) end
         end
     end
 end
-
 
 function HorseBetting.calculatePayouts()
     local winnerIdx = HorseBetting.winningHorseIdx
